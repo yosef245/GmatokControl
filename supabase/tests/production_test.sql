@@ -160,6 +160,41 @@ do $$ begin
   end;
 end $$;
 
+-- 7c. stock actions: receive adds, waste removes, count sets; a worker may not; ranks are for managers
+select pg_temp.login('050-0000006');
+do $$
+declare mat uuid; before numeric;
+begin
+  select id, stock_quantity into mat, before from public.raw_materials order by name limit 1;
+  assert public.record_stock(mat, 'receive', 5, 'ספק') = 5, 'receive returns +5';
+  assert public.record_stock(mat, 'waste', 2, 'נשפך') = -2, 'waste returns -2';
+  assert (select stock_quantity from public.raw_materials where id = mat) = before + 3, 'stock follows receive and waste';
+  perform public.record_stock(mat, 'count', 40, null);
+  assert (select stock_quantity from public.raw_materials where id = mat) = 40, 'count sets the stock';
+  assert public.record_stock(mat, 'count', 40, null) = 0, 'recount with no change records nothing';
+  begin
+    perform public.record_stock(mat, 'waste', -1, null);
+    assert false, 'negative waste must fail';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    insert into public.batch_ranks (product_id, batch_day, rank) values ((select id from public.products limit 1), current_date, 1);
+    assert false, 'warehouse must not reorder the board';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select pg_temp.login('050-0000005');
+do $$ begin
+  begin
+    perform public.record_stock((select id from public.raw_materials limit 1), 'receive', 1, null);
+    assert false, 'worker must not receive stock';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select pg_temp.login('050-0000004');
+insert into public.batch_ranks (product_id, batch_day, rank, updated_by)
+values ((select id from public.products limit 1), current_date, 1, public.current_profile_id());
+
 -- 8. email login: a confirmed email links to the staff profile with that email, an unconfirmed one does not
 reset role;
 update public.users set email = 'Dana@Example.com' where id = '00000000-0000-4000-8000-100000000002';

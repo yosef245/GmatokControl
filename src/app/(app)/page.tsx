@@ -21,6 +21,7 @@ export default async function HomePage() {
   const tomorrow = israelDay(new Date(now.getTime() + 864e5));
 
   const red = materials.filter((m) => m.color === "red");
+  const low = materials.filter((m) => m.color === "orange");
   const shortIds = new Set(red.map((m) => m.id));
   const batches = buildBatches(orders, products, settings, shortIds);
   const cap = capacity(batches, settings, today);
@@ -67,7 +68,7 @@ export default async function HomePage() {
         </Card>
       )}
 
-      {(late.length > 0 || atRisk.length > 0 || red.length > 0) && (
+      {(late.length > 0 || atRisk.length > 0 || red.length > 0 || low.length > 0) && (
         <Card title="התראות">
           <ul className="flex flex-col gap-2">
             {late.map(({ o }) => (
@@ -86,6 +87,12 @@ export default async function HomePage() {
                 {m.supplierName && <span className="text-muted">· ספק {m.supplierName}</span>}
               </li>
             ))}
+            {low.length > 0 && (
+              <li className="flex flex-wrap items-center gap-2">
+                <Pill tone="orange">מלאי נמוך</Pill> {low.map((m) => m.name).join(", ")}
+                <Link href="/inventory" className="text-sm font-bold text-accent underline">להזמנה מספקים</Link>
+              </li>
+            )}
           </ul>
         </Card>
       )}
