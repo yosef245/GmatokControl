@@ -9,6 +9,8 @@ export interface Staff {
   email: string | null;
   phone: string | null;
   roles: Role[];
+  /** Logged in with the initial password; must pick their own before using the app. */
+  mustChangePassword: boolean;
 }
 
 /** The signed-in staff member, or null when the login is not in the staff list. Redirects to /login when signed out. */
@@ -19,10 +21,10 @@ export const getStaff = cache(async (): Promise<Staff | null> => {
   if (!uid) redirect("/login");
   const { data } = await supabase
     .from("users")
-    .select("id, full_name, email, phone, roles")
+    .select("id, full_name, email, phone, roles, must_change_password")
     .eq("auth_user_id", uid)
     .eq("is_active", true)
     .maybeSingle();
   if (!data) return null;
-  return { id: data.id, fullName: data.full_name, email: data.email, phone: data.phone, roles: data.roles as Role[] };
+  return { id: data.id, fullName: data.full_name, email: data.email, phone: data.phone, roles: data.roles as Role[], mustChangePassword: !!data.must_change_password };
 });

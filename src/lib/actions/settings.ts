@@ -48,10 +48,46 @@ export async function saveStaff(_: ActionResult, d: FormData): Promise<ActionRes
   if (id === me.id && (!roles.includes("admin") || !active)) return { error: "אי אפשר להסיר ממך את הרשאת המנהל." };
   const supabase = await createClient();
   const row = { full_name: fullName, email, phone, roles, is_active: active };
-  const { error } = id ? await supabase.from("users").update(row).eq("id", id) : await supabase.from("users").insert(row);
+  if (id) {
+    const { error } = await supabase.from("users").update(row).eq("id", id);
+    if (error) return { error: dbError(error) };
+    revalidatePath("/settings");
+    return { ok: "העובד עודכן." };
+  }
+  const { data: added, error } = await supabase.from("users").insert(row).select("id").single();
   if (error) return { error: dbError(error) };
   revalidatePath("/settings");
-  return { ok: id ? "העובד עודכן." : "העובד נוסף. כדי שיוכל להיכנס, צרו לו משתמש ב־Supabase עם אותו אימייל." };
+  if (!email) return { ok: "העובד נוסף. בלי אימייל אין לו כניסה למערכת." };
+  const { error: loginError } = await supabase.rpc("reset_staff_password", { p_user_id: added.id });
+  if (loginError) return { ok: `העובד נוסף, אבל עוד אין לו כניסה: ${passwordError(loginError.message)}` };
+  return { ok: "העובד נוסף. הוא נכנס עם האימייל והסיסמה הראשונית, ויתבקש לבחור סיסמה משלו." };
+}
+
+function passwordError(message: string) {
+  if (message.includes("initial password")) return "קודם שומרים סיסמה ראשונית למעלה.";
+  if (message.includes("no email")) return "לעובד אין אימייל.";
+  if (message.includes("too short")) return "הסיסמה צריכה לפחות 6 תווים.";
+  return "הפעולה נכשלה. נסו שוב.";
+}
+
+export async function saveInitialPassword(_: ActionResult, d: FormData): Promise<ActionResult> {
+  await requireStaff("manageSettings");
+  const password = String(d.get("initial_password") ?? "");
+  if (password.length < 6) return { error: "הסיסמה צריכה לפחות 6 תווים." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_initial_password", { p_password: password });
+  if (error) return { error: passwordError(error.message) };
+  revalidatePath("/settings");
+  return { ok: "הסיסמה הראשונית נשמרה." };
+}
+
+export async function resetStaffPassword(_: ActionResult, d: FormData): Promise<ActionResult> {
+  await requireStaff("manageSettings");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reset_staff_password", { p_user_id: text(d, "id") });
+  if (error) return { error: passwordError(error.message) };
+  revalidatePath("/settings");
+  return { ok: "הסיסמה אופסה לסיסמה הראשונית. בכניסה הבאה העובד יבחר סיסמה חדשה." };
 }
 
 export async function saveMaterial(_: ActionResult, d: FormData): Promise<ActionResult> {

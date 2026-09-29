@@ -357,6 +357,50 @@ do $$ begin
   assert not exists (select 1 from public.whatsapp_messages where kind = 'supplier'), 'worker sees no supplier messages';
 end $$;
 
+-- 7h. staff logins from the app: initial password, reset, forced change and blocking
+select pg_temp.login('050-0000002');
+do $$ begin
+  begin perform public.set_initial_password('secret1'); assert false, 'marketer cannot set the initial password';
+  exception when insufficient_privilege then null; end;
+  begin perform public.reset_staff_password('00000000-0000-4000-8000-100000000005'); assert false, 'marketer cannot reset passwords';
+  exception when insufficient_privilege then null; end;
+end $$;
+select pg_temp.login('050-0000001');
+do $$
+declare sid uuid; aid uuid;
+begin
+  insert into public.users (full_name, email, roles) values ('עובדת חדשה', 'Fresh@Example.com', '{production_worker}') returning id into sid;
+  begin perform public.reset_staff_password(sid); assert false, 'needs an initial password first';
+  exception when raise_exception then null; end;
+  begin perform public.set_initial_password('abc'); assert false, 'short initial password refused';
+  exception when invalid_parameter_value then null; end;
+  perform public.set_initial_password('start123');
+  perform public.reset_staff_password(sid);
+  select auth_user_id into aid from public.users where id = sid;
+  assert aid is not null, 'login created and linked';
+  assert (select must_change_password from public.users where id = sid), 'must change password';
+  reset role;  -- auth.users is not visible to app users
+  assert (select encrypted_password = extensions.crypt('start123', encrypted_password) and email = 'fresh@example.com'
+            and email_confirmed_at is not null from auth.users where id = aid), 'login has the hashed initial password';
+  assert (select count(*) from auth.identities where user_id = aid and provider = 'email') = 1, 'email identity created';
+  -- blocking bans the login, reactivating lifts it
+  update public.users set is_active = false where id = sid;
+  assert (select banned_until > now() from auth.users where id = aid), 'inactive login banned';
+  update public.users set is_active = true where id = sid;
+  assert (select banned_until is null from auth.users where id = aid), 'active login unbanned';
+  -- a reset changes the same login, not a new one
+  update public.integration_secrets set initial_password = 'again456';
+  perform public.reset_staff_password(sid);
+  assert (select auth_user_id from public.users where id = sid) = aid, 'reset keeps the login';
+  assert (select encrypted_password = extensions.crypt('again456', encrypted_password) from auth.users where id = aid), 'reset sets the password';
+  -- the worker clears the flag after choosing a password
+  reset role;
+  perform set_config('request.jwt.claim.sub', aid::text, false);
+  set role authenticated;
+  perform public.password_changed();
+  assert not (select must_change_password from public.users where id = sid), 'flag cleared';
+end $$;
+
 -- 8. email login: a confirmed email links to the staff profile with that email, an unconfirmed one does not
 reset role;
 update public.users set email = 'Dana@Example.com' where id = '00000000-0000-4000-8000-100000000002';

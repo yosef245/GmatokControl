@@ -27,7 +27,8 @@ http.createServer(async (req, res) => {
   if (req.url.startsWith("/auth/v1/token")) {
     const { email, password } = JSON.parse(body || "{}");
     const safe = String(email || "").replace(/'/g, "");
-    const id = q(`select id from auth.users where lower(email)=lower('${safe}') and encrypted_password='${String(password).replace(/'/g, "")}'`);
+    const pw = String(password).replace(/'/g, "");
+    const id = q(`select id from auth.users where lower(email)=lower('${safe}') and encrypted_password = extensions.crypt('${pw}', encrypted_password) and (banned_until is null or banned_until < now())`);
     if (!id) return send(400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
     const exp = Math.floor(Date.now() / 1000) + 3600;
     const claims = { sub: id, email: safe, role: "authenticated", aud: "authenticated", exp, iat: exp - 3600, session_id: crypto.randomUUID() };
@@ -35,6 +36,11 @@ http.createServer(async (req, res) => {
   }
   if (req.url.startsWith("/auth/v1/user")) {
     const c = verify((req.headers.authorization || "").replace(/^Bearer /, ""));
+    if (c && req.method === "PUT") {
+      const { password } = JSON.parse(body || "{}");
+      if (!password || String(password).length < 6) return send(422, { code: 422, error_code: "weak_password", msg: "Password should be at least 6 characters." });
+      q(`update auth.users set encrypted_password = extensions.crypt('${String(password).replace(/'/g, "")}', extensions.gen_salt('bf', 4)) where id = '${c.sub}'`);
+    }
     return c ? send(200, userJson(c)) : send(401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
   }
   if (req.url.startsWith("/auth/v1/logout")) return send(204);
