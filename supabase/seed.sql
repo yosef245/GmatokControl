@@ -167,3 +167,6 @@ insert into public.order_items (order_id, product_id, quantity, unit_price, note
   (1047, '00000000-0000-4000-8000-300000000031', 15, 60, null),
   (1048, '00000000-0000-4000-8000-300000000035', 12, 55, null),
   (1048, '00000000-0000-4000-8000-300000000037', 6, 65, null);
+update public.orders o set total_amount = t.total
+  from (select order_id, sum(quantity * unit_price) as total from public.order_items group by order_id) t
+ where t.order_id = o.id;

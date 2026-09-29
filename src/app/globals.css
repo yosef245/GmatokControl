@@ -77,3 +77,8 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+@media print {
+  @page { size: A4; margin: 15mm; }
+  body { background: #fff !important; color: #2a1b14; }
+}

@@ -23,3 +23,7 @@ export function duration(minutes: number): string {
   const h = Math.floor(m / 60), r = m % 60;
   return h ? `${h} שע׳${r ? ` ${r} דק׳` : ""}` : `${r} דק׳`;
 }
+
+/** Absolute date and time for documents that outlive the day they were made ("יום ד׳, 30.9.2026, 12:00"). */
+export const fullWhen = (d: Date) =>
+  new Intl.DateTimeFormat("he-IL", { timeZone: TZ, weekday: "short", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);

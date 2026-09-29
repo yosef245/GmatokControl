@@ -3,19 +3,10 @@ import { getStaff } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { loadActiveOrders, loadMaterials, loadProducts, loadSettings } from "@/lib/data";
 import { buildBatches, capacity, israelDay, slaState } from "@/lib/domain/schedule";
-import type { OrderStatus } from "@/lib/domain/types";
+import { STATUS } from "@/lib/status";
 import { duration, fmt, when } from "@/lib/format";
-import { Card, PageTitle, Pill, type Tone } from "@/components/ui";
+import { Card, PageTitle, Pill } from "@/components/ui";
 
-const STATUS: Record<OrderStatus, [string, Tone]> = {
-  draft: ["טיוטה", "neutral"],
-  pending_approval: ["ממתינה לייצור", "neutral"],
-  in_production: ["בייצור", "blue"],
-  ready_for_delivery: ["מוכנה למשלוח", "green"],
-  in_transit: ["בדרך", "blue"],
-  delivered: ["נמסרה", "green"],
-  cancelled: ["בוטלה", "neutral"],
-};
 
 export default async function HomePage() {
   const staff = (await getStaff())!;
@@ -107,7 +98,7 @@ export default async function HomePage() {
             {soon.map(({ o, sla }) => {
               const total = o.items.reduce((s, i) => s + i.quantity, 0);
               const done = o.items.reduce((s, i) => s + i.producedQuantity, 0);
-              const [label, tone] = STATUS[o.status];
+              const { label, tone } = STATUS[o.status];
               return (
                 <li key={o.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
                   <b className="tabular-nums">#{o.id}</b>
