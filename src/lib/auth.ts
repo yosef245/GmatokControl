@@ -9,7 +9,7 @@ export interface Staff {
   email: string | null;
   phone: string | null;
   roles: Role[];
-  /** Logged in with the initial password; must pick their own before using the app. */
+  /** Logged in with a temporary password; must pick their own before using the app. */
   mustChangePassword: boolean;
 }
 

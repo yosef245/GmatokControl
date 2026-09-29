@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { chromium } from "./lib.mjs";
+import { chromium, gotoGuarded } from "./lib.mjs";
 const BASE = "http://localhost:3000", OUT = process.env.OUT ?? "e2e/shots";
 const DB = `postgresql://postgres@localhost:54330/postgres?host=${process.cwd()}/.e2e/pg`;
 const sql = (q) => execFileSync("psql", [DB, "-qAtc", q], { encoding: "utf8" }).trim();
@@ -69,7 +69,7 @@ await visit(wh, "/reports", "warehouse"); check(!wh.url().includes("/reports"), 
 
 // ---- worker and marketer may not deliver
 const wk = await session("u5@test.local");
-await wk.goto(BASE + "/deliveries"); check(!wk.url().includes("/deliveries"), "worker reached deliveries");
+await gotoGuarded(wk, BASE + "/deliveries"); check(!wk.url().includes("/deliveries"), "worker reached deliveries");
 
 // ---- admin: price list, customer on the list, import
 const a = await session("u1@test.local");

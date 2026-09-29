@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
 function signatureOk(body: string, header: string | null): boolean {
   const secret = process.env.WHATSAPP_APP_SECRET;
-  if (!secret) return true; // optional: without the app secret the database token still guards status updates
+  if (!secret) return false; // without Meta's app secret nobody can prove a request came from Meta
   if (!header?.startsWith("sha256=")) return false;
   const expected = Buffer.from(createHmac("sha256", secret).update(body).digest("hex"));
   const given = Buffer.from(header.slice(7));
@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
   if (token && statuses.length) {
     const { url, key } = supabaseEnv();
     const supabase = createClient(url, key, { auth: { persistSession: false } });
-    for (const s of statuses) {
+    // Meta sends a handful per call; a flood is not from Meta
+    for (const s of statuses.slice(0, 100)) {
       if (!s.id || !s.status) continue;
       const err = s.errors?.[0];
       await supabase.rpc("whatsapp_status", {

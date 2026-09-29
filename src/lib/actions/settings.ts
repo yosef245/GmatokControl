@@ -58,36 +58,27 @@ export async function saveStaff(_: ActionResult, d: FormData): Promise<ActionRes
   if (error) return { error: dbError(error) };
   revalidatePath("/settings");
   if (!email) return { ok: "העובד נוסף. בלי אימייל אין לו כניסה למערכת." };
-  const { error: loginError } = await supabase.rpc("reset_staff_password", { p_user_id: added.id });
+  const { data: password, error: loginError } = await supabase.rpc("reset_staff_password", { p_user_id: added.id });
   if (loginError) return { ok: `העובד נוסף, אבל עוד אין לו כניסה: ${passwordError(loginError.message)}` };
-  return { ok: "העובד נוסף. הוא נכנס עם האימייל והסיסמה הראשונית, ויתבקש לבחור סיסמה משלו." };
+  return { ok: `העובד נוסף. הסיסמה הזמנית שלו: ${tempPassword(password)}` };
 }
+
+// The temporary password is shown only in this message: it is not stored anywhere readable.
+const tempPassword = (password: string) =>
+  `\u2066${password}\u2069. העבירו אותה לעובד. הוא נכנס איתה עם האימייל שלו, ובכניסה הראשונה בוחר סיסמה משלו.`;
 
 function passwordError(message: string) {
-  if (message.includes("initial password")) return "קודם שומרים סיסמה ראשונית למעלה.";
   if (message.includes("no email")) return "לעובד אין אימייל.";
-  if (message.includes("too short")) return "הסיסמה צריכה לפחות 6 תווים.";
   return "הפעולה נכשלה. נסו שוב.";
-}
-
-export async function saveInitialPassword(_: ActionResult, d: FormData): Promise<ActionResult> {
-  await requireStaff("manageSettings");
-  const password = String(d.get("initial_password") ?? "");
-  if (password.length < 6) return { error: "הסיסמה צריכה לפחות 6 תווים." };
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("set_initial_password", { p_password: password });
-  if (error) return { error: passwordError(error.message) };
-  revalidatePath("/settings");
-  return { ok: "הסיסמה הראשונית נשמרה." };
 }
 
 export async function resetStaffPassword(_: ActionResult, d: FormData): Promise<ActionResult> {
   await requireStaff("manageSettings");
   const supabase = await createClient();
-  const { error } = await supabase.rpc("reset_staff_password", { p_user_id: text(d, "id") });
+  const { data: password, error } = await supabase.rpc("reset_staff_password", { p_user_id: text(d, "id") });
   if (error) return { error: passwordError(error.message) };
   revalidatePath("/settings");
-  return { ok: "הסיסמה אופסה לסיסמה הראשונית. בכניסה הבאה העובד יבחר סיסמה חדשה." };
+  return { ok: `סיסמה זמנית חדשה: ${tempPassword(password)}` };
 }
 
 export async function saveMaterial(_: ActionResult, d: FormData): Promise<ActionResult> {

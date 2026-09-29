@@ -7,7 +7,8 @@ export type ActionResult = { error: string } | { ok: string } | null;
 /** The signed-in staff member if they hold the permission; server actions call this first. */
 export async function requireStaff(permission?: Permission): Promise<Staff> {
   const staff = await getStaff();
-  if (!staff || (permission && !can(staff.roles, permission))) throw new Error("אין הרשאה לפעולה הזאת");
+  // someone still on a temporary password can only choose their own (see changePassword)
+  if (!staff || staff.mustChangePassword || (permission && !can(staff.roles, permission))) throw new Error("אין הרשאה לפעולה הזאת");
   return staff;
 }
 

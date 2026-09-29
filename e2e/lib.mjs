@@ -9,3 +9,9 @@ try {
   pw = require(`${execSync("npm root -g").toString().trim()}/playwright`);
 }
 export const { chromium } = pw;
+
+/** Opens a page the user may not see. The page sends them home, after the loading screen when navigation streams. */
+export async function gotoGuarded(page, url) {
+  await page.goto(url);
+  await page.waitForURL((u) => u.href !== url, { timeout: 5000 }).catch(() => {});
+}
