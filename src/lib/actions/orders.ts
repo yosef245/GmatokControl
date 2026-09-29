@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../supabase/server";
 import { fromIsraelLocal } from "../dates";
+import { waConfigured } from "../wa-api";
+import { loadWaSettings, sendOrderMessage } from "../wa-send";
 import { dbError, optional, requireStaff, text, type ActionResult } from "./result";
 
 interface ItemInput {
@@ -14,7 +16,7 @@ interface ItemInput {
 }
 
 export async function createOrder(_: ActionResult, d: FormData): Promise<ActionResult> {
-  await requireStaff("createOrder");
+  const me = await requireStaff("createOrder");
   const customerId = text(d, "customer_id");
   const delivery = fromIsraelLocal(text(d, "delivery_date"), text(d, "delivery_time") || "12:00");
   let items: ItemInput[];
@@ -40,9 +42,14 @@ export async function createOrder(_: ActionResult, d: FormData): Promise<ActionR
     p_items: items,
   });
   if (error) return { error: dbError(error, "יצירת ההזמנה נכשלה. נסו שוב.") };
+  let sent = "";
+  if (waConfigured() && (await loadWaSettings()).auto.confirm) {
+    // the order exists either way; a failed message shows on the order page with a button to resend
+    sent = (await sendOrderMessage(me.id, data, "confirm", true)).ok ? "&wa=sent" : "&wa=failed";
+  }
   revalidatePath("/orders");
   revalidatePath("/");
-  redirect(`/orders/${data}?created=1`);
+  redirect(`/orders/${data}?created=1${sent}`);
 }
 
 export async function updateOrder(_: ActionResult, d: FormData): Promise<ActionResult> {

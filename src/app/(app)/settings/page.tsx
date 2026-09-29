@@ -5,6 +5,7 @@ import { can, ROLE_LABELS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 import { createProduct, saveBusiness, saveMaterial, savePriceList, savePriceListPrices, saveStaff } from "@/lib/actions/settings";
 import { ImportPanel } from "./import-panel";
+import { WhatsAppSettings } from "./whatsapp-settings";
 import { ActionForm } from "@/components/action-form";
 import { btnPrimary, btnSecondary, Card, Field, inputCls, PageTitle, Pill, Tabs } from "@/components/ui";
 import { duration, fmt, money } from "@/lib/format";
@@ -17,6 +18,7 @@ const TABS = [
   { key: "materials", label: "חומרי גלם" },
   { key: "prices", label: "מחירונים" },
   { key: "import", label: "ייבוא מאקסל" },
+  { key: "whatsapp", label: "וואטסאפ" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -35,6 +37,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       {tab === "materials" && <Materials />}
       {tab === "prices" && <PriceLists />}
       {tab === "import" && <ImportPanel />}
+      {tab === "whatsapp" && <WhatsAppSettings />}
     </>
   );
 }

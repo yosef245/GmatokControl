@@ -320,6 +320,43 @@ do $$ begin
   end;
 end $$;
 
+-- 7g. WhatsApp log: staff log messages for orders they see; statuses need the webhook token and never go backwards
+select pg_temp.login('050-0000002');
+do $$
+declare oid int := (select id from public.orders where marketer_id = public.current_profile_id() limit 1);
+begin
+  insert into public.whatsapp_messages (order_id, to_phone, template, kind, wa_message_id, sent_by)
+  values (oid, '972500000000', 'order_confirmation', 'confirm', 'wamid.A', public.current_profile_id());
+  begin
+    insert into public.whatsapp_messages (to_phone, template, kind, sent_by)
+    values ('972500000000', 'x', 'test', '00000000-0000-4000-8000-100000000001');
+    assert false, 'cannot log a message as someone else';
+  exception when insufficient_privilege then null;
+  end;
+  assert not exists (select 1 from public.integration_secrets), 'marketer cannot read the webhook token';
+end $$;
+reset role;
+set role anon;
+do $$ begin
+  assert public.whatsapp_status('wrong', 'wamid.A', 'read') = false, 'wrong token ignored';
+end $$;
+reset role;
+do $$
+declare tok text := (select whatsapp_webhook_token from public.integration_secrets);
+begin
+  set local role anon;
+  assert public.whatsapp_status(tok, 'wamid.A', 'read'), 'read recorded';
+  assert public.whatsapp_status(tok, 'wamid.A', 'delivered') = false, 'status does not go back';
+  assert public.whatsapp_status(tok, 'wamid.A', 'failed', 'blocked') , 'failure recorded';
+  reset role;
+  assert (select status from public.whatsapp_messages where wa_message_id = 'wamid.A') = 'failed', 'final status failed';
+  assert (select error from public.whatsapp_messages where wa_message_id = 'wamid.A') = 'blocked', 'error kept';
+end $$;
+select pg_temp.login('050-0000005');
+do $$ begin
+  assert not exists (select 1 from public.whatsapp_messages where kind = 'supplier'), 'worker sees no supplier messages';
+end $$;
+
 -- 8. email login: a confirmed email links to the staff profile with that email, an unconfirmed one does not
 reset role;
 update public.users set email = 'Dana@Example.com' where id = '00000000-0000-4000-8000-100000000002';

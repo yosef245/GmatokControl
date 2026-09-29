@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/api/whatsapp/webhook"];
 
 /** Refreshes the Supabase session on every request and sends signed-out visitors to /login. */
 export async function proxy(request: NextRequest) {
