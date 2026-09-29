@@ -17,8 +17,13 @@ async function session(email, w = 1280, h = 800) {
   return page;
 }
 const go = async (p, path) => { await p.goto(BASE + path); await p.waitForLoadState("networkidle"); };
-const shot = (p, n, full = false) => p.screenshot({ path: `${OUT}/${n}.png`, fullPage: full });
-const el = (loc, n) => loc.screenshot({ path: `${OUT}/${n}.png` });
+// full-page shots: unstick the header and sidebar so they are drawn once, in place
+const UNSTICK = "header,nav{position:static!important}nav.h-screen{height:auto!important}";
+const shot = async (p, n, full = false) => {
+  if (full) await p.addStyleTag({ content: UNSTICK });
+  await p.screenshot({ path: `${OUT}/${n}.png`, fullPage: full });
+};
+const el = async (loc, n) => { await loc.page().addStyleTag({ content: UNSTICK }); await loc.screenshot({ path: `${OUT}/${n}.png` }); };
 
 // login
 {
