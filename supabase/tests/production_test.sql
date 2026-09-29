@@ -131,6 +131,35 @@ select pg_temp.login('050-0000006');
 insert into public.stock_movements (raw_material_id, quantity, movement_type, reason, performed_by)
 values ((select id from public.raw_materials where name = 'ממרח פרלינה לוז'), 10, 'receive', 'test', public.current_profile_id());
 
+-- 7b. create_order: a marketer creates an order for their customer, a worker cannot
+select pg_temp.login('050-0000002');
+do $$
+declare cust uuid; prod uuid; new_id int;
+begin
+  select id into cust from public.customers where assigned_marketer_id = public.current_profile_id() limit 1;
+  select id into prod from public.products where is_active limit 1;
+  new_id := public.create_order(cust, null, now() + interval '2 days', true, ' בדיקה ',
+    jsonb_build_array(jsonb_build_object('product_id', prod, 'quantity', 3)));
+  assert (select status from public.orders where id = new_id) = 'pending_approval', 'new order waits for production';
+  assert (select total_amount from public.orders where id = new_id) = 3 * (select price from public.products where id = prod), 'total uses list price';
+  assert (select notes from public.orders where id = new_id) = 'בדיקה', 'notes trimmed';
+  assert exists (select 1 from public.audit_logs where order_id = new_id and action_type = 'created'), 'creation is audited';
+  begin
+    perform public.create_order(cust, null, now(), false, null, '[]'::jsonb);
+    assert false, 'empty order must fail';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+select pg_temp.login('050-0000005');
+do $$ begin
+  begin
+    perform public.create_order((select id from public.customers limit 1), null, now(), false, null,
+      jsonb_build_array(jsonb_build_object('product_id', (select id from public.products limit 1), 'quantity', 1)));
+    assert false, 'worker must not create orders';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 -- 8. email login: a confirmed email links to the staff profile with that email, an unconfirmed one does not
 reset role;
 update public.users set email = 'Dana@Example.com' where id = '00000000-0000-4000-8000-100000000002';

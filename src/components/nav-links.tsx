@@ -13,7 +13,8 @@ function isActive(path: string, href: string) {
 
 export function NavLinks({ items, variant }: { items: NavItem[]; variant: "rail" | "tabs" }) {
   const path = usePathname();
-  const shown = variant === "tabs" ? items.filter((i) => i.href !== "/settings" && i.href !== "/customers").slice(0, 5) : items;
+  // phones get at most five tabs; the rest sit behind "עוד"
+  const shown = variant === "tabs" && items.length > 5 ? [...items.slice(0, 4), { href: "/more", label: "עוד", icon: "more" }] : items;
   return shown.map((i) => {
     const active = isActive(path, i.href);
     const base =
