@@ -10,7 +10,7 @@ begin
   reset role;
   select auth_user_id into uid from public.users where phone = p;
   if uid is null then
-    insert into auth.users (phone) values ('972' || substr(regexp_replace(p, '\D', '', 'g'), 2)) returning id into uid;
+    insert into auth.users (phone, phone_confirmed_at) values ('972' || substr(regexp_replace(p, '\D', '', 'g'), 2), now()) returning id into uid;
   end if;
   perform set_config('request.jwt.claim.sub', uid::text, false);
   set role authenticated;
@@ -357,48 +357,78 @@ do $$ begin
   assert not exists (select 1 from public.whatsapp_messages where kind = 'supplier'), 'worker sees no supplier messages';
 end $$;
 
--- 7h. staff logins from the app: initial password, reset, forced change and blocking
+-- 7h. staff logins from the app: a temporary password per worker, reset, forced change and blocking
 select pg_temp.login('050-0000002');
 do $$ begin
-  begin perform public.set_initial_password('secret1'); assert false, 'marketer cannot set the initial password';
-  exception when insufficient_privilege then null; end;
   begin perform public.reset_staff_password('00000000-0000-4000-8000-100000000005'); assert false, 'marketer cannot reset passwords';
   exception when insufficient_privilege then null; end;
 end $$;
 select pg_temp.login('050-0000001');
 do $$
-declare sid uuid; aid uuid;
+declare sid uuid; aid uuid; pw text; pw2 text; admin_sub text := current_setting('request.jwt.claim.sub');
 begin
   insert into public.users (full_name, email, roles) values ('עובדת חדשה', 'Fresh@Example.com', '{production_worker}') returning id into sid;
-  begin perform public.reset_staff_password(sid); assert false, 'needs an initial password first';
-  exception when raise_exception then null; end;
-  begin perform public.set_initial_password('abc'); assert false, 'short initial password refused';
-  exception when invalid_parameter_value then null; end;
-  perform public.set_initial_password('start123');
-  perform public.reset_staff_password(sid);
+  pw := public.reset_staff_password(sid);
+  assert pw ~ '^[a-z2-9]{10}$', 'a readable 10-character temporary password';
   select auth_user_id into aid from public.users where id = sid;
   assert aid is not null, 'login created and linked';
   assert (select must_change_password from public.users where id = sid), 'must change password';
   reset role;  -- auth.users is not visible to app users
-  assert (select encrypted_password = extensions.crypt('start123', encrypted_password) and email = 'fresh@example.com'
-            and email_confirmed_at is not null from auth.users where id = aid), 'login has the hashed initial password';
+  assert (select encrypted_password = extensions.crypt(pw, encrypted_password) and email = 'fresh@example.com'
+            and email_confirmed_at is not null from auth.users where id = aid), 'login has the hashed temporary password';
   assert (select count(*) from auth.identities where user_id = aid and provider = 'email') = 1, 'email identity created';
   -- blocking bans the login, reactivating lifts it
   update public.users set is_active = false where id = sid;
   assert (select banned_until > now() from auth.users where id = aid), 'inactive login banned';
   update public.users set is_active = true where id = sid;
   assert (select banned_until is null from auth.users where id = aid), 'active login unbanned';
-  -- a reset changes the same login, not a new one
-  update public.integration_secrets set initial_password = 'again456';
-  perform public.reset_staff_password(sid);
-  assert (select auth_user_id from public.users where id = sid) = aid, 'reset keeps the login';
-  assert (select encrypted_password = extensions.crypt('again456', encrypted_password) from auth.users where id = aid), 'reset sets the password';
-  -- the worker clears the flag after choosing a password
+  -- a reset changes the same login to a new password, not a new login
+  perform set_config('request.jwt.claim.sub', admin_sub, false);
+  set role authenticated;
+  pw2 := public.reset_staff_password(sid);
+  assert pw2 <> pw, 'every reset makes a new password';
   reset role;
+  assert (select auth_user_id from public.users where id = sid) = aid, 'reset keeps the login';
+  assert (select encrypted_password = extensions.crypt(pw2, encrypted_password) from auth.users where id = aid), 'reset sets the password';
+  -- the worker clears the flag after choosing a password
   perform set_config('request.jwt.claim.sub', aid::text, false);
   set role authenticated;
   perform public.password_changed();
   assert not (select must_change_password from public.users where id = sid), 'flag cleared';
+end $$;
+
+-- 7i. security: direct writes that bypass the app's checks are refused
+reset role;
+do $$ begin
+  assert not has_function_privilege('anon', 'public.create_order(uuid, uuid, timestamptz, boolean, text, jsonb)', 'execute'), 'signed-out visitors cannot run app functions';
+  assert not has_function_privilege('anon', 'public.order_has_production(int)', 'execute'), 'nor the helpers';
+  assert has_function_privilege('anon', 'public.whatsapp_status(text, text, text, text)', 'execute'), 'the webhook still can';
+end $$;
+select pg_temp.login('050-0000002');  -- marketer
+do $$
+declare cust uuid := (select id from public.customers limit 1);
+begin
+  begin
+    insert into public.orders (customer_id, marketer_id, delivery_date, status, total_amount)
+    values (cust, public.current_profile_id(), now() + interval '1 day', 'ready_for_delivery', 0);
+    assert false, 'marketer cannot insert an order directly';
+  exception when insufficient_privilege then null; end;
+  begin
+    update public.customers set price_list_id = (select id from public.price_lists limit 1) where assigned_marketer_id = public.current_profile_id();
+    if found then assert false, 'marketer cannot move a customer to a price list'; end if;
+  exception when insufficient_privilege then null; end;
+end $$;
+-- 7j. a phone number links to a staff profile only once the phone is confirmed
+reset role;
+do $$
+declare sid uuid; uid uuid;
+begin
+  insert into public.users (full_name, phone, roles) values ('מנהלת טלפון', '050-7777777', '{admin}') returning id into sid;
+  insert into auth.users (phone) values ('972507777777') returning id into uid;
+  assert (select auth_user_id from public.users where id = sid) is null, 'unconfirmed phone does not take over the profile';
+  update auth.users set phone_confirmed_at = now() where id = uid;
+  assert (select auth_user_id from public.users where id = sid) = uid, 'confirmed phone links';
+  delete from public.users where id = sid;
 end $$;
 
 -- 8. email login: a confirmed email links to the staff profile with that email, an unconfirmed one does not

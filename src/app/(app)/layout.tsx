@@ -63,7 +63,7 @@ function ChangePassword({ name }: { name: string }) {
     <main className="mx-auto mt-[10vh] flex max-w-md flex-col gap-4 px-4">
       <div className="self-start"><BrandMark size="lg" /></div>
       <h1 className="font-display text-3xl text-accent">שלום {name}, בוחרים סיסמה</h1>
-      <p>נכנסת עם הסיסמה הראשונית. בחר/י סיסמה משלך, לפחות 6 תווים. איתה נכנסים מעכשיו.</p>
+      <p>נכנסת עם סיסמה זמנית. בחר/י סיסמה משלך, לפחות 6 תווים. איתה נכנסים מעכשיו.</p>
       <ActionForm action={changePassword} className="flex flex-col gap-3">
         <Field label="סיסמה חדשה"><input name="password" type="password" autoComplete="new-password" className={inputCls} dir="ltr" required minLength={6} autoFocus /></Field>
         <Field label="שוב, לאימות"><input name="confirm" type="password" autoComplete="new-password" className={inputCls} dir="ltr" required minLength={6} /></Field>

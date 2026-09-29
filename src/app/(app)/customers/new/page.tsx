@@ -14,12 +14,12 @@ export default async function NewCustomerPage({ searchParams }: PageProps<"/cust
   const { next } = await searchParams;
   const isAdmin = staff.roles.includes("admin");
   const supabase = await createClient();
-  const { data: marketers } = isAdmin
-    ? await supabase.from("users").select("id, full_name").contains("roles", ["marketer"]).eq("is_active", true).order("full_name")
-    : { data: undefined };
-  const { data: priceLists } = isAdmin
-    ? await supabase.from("price_lists").select("id, name").eq("is_active", true).order("name")
-    : { data: undefined };
+  const [{ data: marketers }, { data: priceLists }] = isAdmin
+    ? await Promise.all([
+        supabase.from("users").select("id, full_name").contains("roles", ["marketer"]).eq("is_active", true).order("full_name"),
+        supabase.from("price_lists").select("id, name").eq("is_active", true).order("name"),
+      ])
+    : [{ data: undefined }, { data: undefined }];
   return (
     <>
       <div>

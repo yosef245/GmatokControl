@@ -30,10 +30,15 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
   const staff = (await getStaff())!;
   const { id } = await params;
   const { created, wa: waResult } = await searchParams;
-  const o = await loadOrder(Number(id));
-  if (!o) notFound();
   const supabase = await createClient();
-  const { data: settings } = await supabase.from("settings").select("business_name, vat_percent").single();
+  // everything the page needs, fetched at once rather than one after another
+  const [o, { data: settings }, allCouriers, messages] = await Promise.all([
+    loadOrder(Number(id)),
+    supabase.from("settings").select("business_name, vat_percent").single(),
+    can(staff.roles, "manageDeliveries") ? loadCouriers() : Promise.resolve([]),
+    Number.isInteger(Number(id)) ? loadWaMessages({ orderId: Number(id) }) : Promise.resolve([]),
+  ]);
+  if (!o) notFound();
   const vatPercent = Number(settings?.vat_percent ?? 18);
   const prices = can(staff.roles, "seePrices");
   const editable = can(staff.roles, "editOrder") && ["draft", "pending_approval", "in_production", "ready_for_delivery"].includes(o.status);
@@ -41,14 +46,13 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
   const st = STATUS[o.status];
   const local = toIsraelLocal(o.deliveryDate);
   const delivers = can(staff.roles, "manageDeliveries") && (o.status === "ready_for_delivery" || o.status === "in_transit");
-  const couriers = delivers ? await loadCouriers() : [];
+  const couriers = delivers ? allCouriers : [];
   const api = waConfigured();
   const waSend = {
     confirm: can(staff.roles, "createOrder") && o.status !== "cancelled",
     transit: can(staff.roles, "manageDeliveries") && o.status === "in_transit",
     delivered: can(staff.roles, "manageDeliveries") && o.status === "delivered",
   };
-  const messages = await loadWaMessages({ orderId: o.id });
   const remaining = o.items.reduce((s, i) => s + Math.max(0, i.quantity - i.produced) * i.minutes, 0);
 
   return (

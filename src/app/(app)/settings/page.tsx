@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getStaff } from "@/lib/auth";
 import { can, ROLE_LABELS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
-import { createProduct, saveBusiness, saveMaterial, savePriceList, savePriceListPrices, saveStaff, saveInitialPassword, resetStaffPassword } from "@/lib/actions/settings";
+import { createProduct, saveBusiness, saveMaterial, savePriceList, savePriceListPrices, saveStaff, resetStaffPassword } from "@/lib/actions/settings";
 import { ImportPanel } from "./import-panel";
 import { WhatsAppSettings } from "./whatsapp-settings";
 import { ActionForm } from "@/components/action-form";
@@ -81,24 +81,9 @@ function RoleBoxes({ selected = [] }: { selected?: Role[] }) {
 
 async function Staff({ myId }: { myId: string }) {
   const supabase = await createClient();
-  const [{ data: users }, { data: secrets }] = await Promise.all([
-    supabase.from("users").select("*").order("is_active", { ascending: false }).order("full_name"),
-    supabase.from("integration_secrets").select("initial_password").maybeSingle(),
-  ]);
-  const initial = (secrets?.initial_password as string | null) ?? "";
+  const { data: users } = await supabase.from("users").select("*").order("is_active", { ascending: false }).order("full_name");
   return (
     <>
-      <Card title="סיסמה ראשונית">
-        <p className="mb-3 text-sm text-muted">
-          כל עובד חדש נכנס עם האימייל שלו והסיסמה הזאת, ובכניסה הראשונה בוחר סיסמה משלו. גם ״איפוס סיסמה״ מחזיר אותו לסיסמה הזאת.
-        </p>
-        <ActionForm action={saveInitialPassword} className="flex flex-wrap items-end gap-3">
-          <Field label="סיסמה ראשונית" hint="לפחות 6 תווים" className="min-w-48 flex-1">
-            <input name="initial_password" defaultValue={initial} className={inputCls} dir="ltr" required minLength={6} autoComplete="off" />
-          </Field>
-          <button className={btnPrimary}>שמירה</button>
-        </ActionForm>
-      </Card>
       <Card title="עובד חדש">
         <ActionForm action={saveStaff} resetOnOk className="grid gap-4 md:grid-cols-3">
           <Field label="שם מלא"><input name="full_name" className={inputCls} required /></Field>
@@ -108,7 +93,7 @@ async function Staff({ myId }: { myId: string }) {
           <div className="md:col-span-3"><button className={btnPrimary}>הוספה</button></div>
         </ActionForm>
         <p className="mt-3 text-sm text-muted">
-          {initial ? "העובד יכול להיכנס מיד עם האימייל והסיסמה הראשונית." : "כדי שעובדים חדשים יוכלו להיכנס, קודם שומרים סיסמה ראשונית."}
+          לעובד עם אימייל נוצרת סיסמה זמנית שמופיעה כאן פעם אחת. מעבירים אותה לעובד, ובכניסה הראשונה הוא בוחר סיסמה משלו.
         </p>
       </Card>
       <Card title="עובדים" className="p-0">
@@ -146,7 +131,7 @@ async function Staff({ myId }: { myId: string }) {
                   <ActionForm action={resetStaffPassword} className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
                     <input type="hidden" name="id" value={u.id} />
                     <button className={btnSecondary}>{u.auth_user_id ? "איפוס סיסמה" : "יצירת כניסה"}</button>
-                    <span className="text-sm text-muted">מחזיר לסיסמה הראשונית, והעובד יבחר סיסמה חדשה בכניסה הבאה.</span>
+                    <span className="text-sm text-muted">יוצר סיסמה זמנית חדשה, והעובד יבחר סיסמה משלו בכניסה הבאה.</span>
                   </ActionForm>
                 )}
               </details>

@@ -1,4 +1,4 @@
-import { chromium } from "./lib.mjs";
+import { chromium, gotoGuarded } from "./lib.mjs";
 const BASE = "http://localhost:3000";
 const OUT = process.env.OUT ?? "e2e/shots";
 const browser = await chromium.launch();
@@ -108,7 +108,7 @@ const m = await session("u2@test.local");
 const mo = await visit(m, "/orders?view=all", "marketer");
 await visit(m, "/orders/new", "marketer", "הזמנה חדשה");
 await visit(m, "/customers", "marketer");
-await m.goto(BASE + "/settings"); if (!m.url().endsWith(BASE + "/") && m.url() !== BASE + "/") problems.push("marketer reached settings: " + m.url());
+await gotoGuarded(m, BASE + "/settings"); if (!m.url().endsWith(BASE + "/") && m.url() !== BASE + "/") problems.push("marketer reached settings: " + m.url());
 console.log("marketer sees orders:", (mo.match(/#\d{4}/g) || []).join(" "));
 // marketer creates an order
 await m.goto(BASE + "/orders/new");
@@ -121,7 +121,7 @@ console.log("marketer created", new URL(m.url()).pathname);
 const w = await session("u5@test.local");
 const wb = await visit(w, "/orders/1046", "worker", "הזמנה #1046");
 if (/₪/.test(wb)) problems.push("worker sees prices on order page");
-await w.goto(BASE + "/orders"); if (w.url().includes("/orders")) problems.push("worker reached order list");
+await gotoGuarded(w, BASE + "/orders"); if (w.url().includes("/orders")) problems.push("worker reached order list");
 await visit(w, "/", "worker", "מבט על");
 await w.setViewportSize({ width: 390, height: 844 });
 await visit(a, "/", "admin");

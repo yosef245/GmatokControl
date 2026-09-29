@@ -21,7 +21,7 @@ export function ActionForm({
     if (resetOnOk && state && "ok" in state) ref.current?.reset();
   }, [state, resetOnOk]);
   return (
-    <form ref={ref} action={run} className={className} aria-busy={pending}>
+    <form ref={ref} action={run} className={`${className} aria-busy:cursor-wait aria-busy:opacity-70`} aria-busy={pending}>
       <fieldset disabled={pending} className="contents">
         {children}
       </fieldset>

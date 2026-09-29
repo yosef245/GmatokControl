@@ -16,8 +16,12 @@ function verify(t) {
 }
 const q = (sql) => { try { return execFileSync("psql", [DB, "-At", "-c", sql]).toString().trim(); } catch { return ""; } };
 const userJson = (c) => ({ id: c.sub, aud: "authenticated", role: "authenticated", email: c.email, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() });
+// E2E_LATENCY_MS simulates the round trip to a far-away Supabase region; every request is logged so round trips can be counted.
+const LATENCY = Number(process.env.E2E_LATENCY_MS || 0);
 http.createServer(async (req, res) => {
   const body = await new Promise((r) => { let d = ""; req.on("data", (c) => (d += c)); req.on("end", () => r(d)); });
+  if (req.method !== "OPTIONS") console.log(new Date().toISOString(), req.method, req.url.split("?")[0]);
+  if (LATENCY) await new Promise((r) => setTimeout(r, LATENCY));
   res.setHeader("access-control-allow-origin", req.headers.origin || "*");
   res.setHeader("access-control-allow-credentials", "true");
   res.setHeader("access-control-allow-headers", req.headers["access-control-request-headers"] || "*");

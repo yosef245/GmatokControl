@@ -1,4 +1,4 @@
-import { chromium } from "./lib.mjs";
+import { chromium, gotoGuarded } from "./lib.mjs";
 const BASE = "http://localhost:3000", OUT = process.env.OUT ?? "e2e/shots";
 const browser = await chromium.launch();
 const problems = [];
@@ -54,7 +54,7 @@ await w.reload();
 if (await w.locator("article h3", { hasText: bname }).count() && (await w.locator("article").nth(1).locator("h3").textContent()) === bname) problems.push("worker: full batch still on board: " + bname);
 console.log("fully produced batch", bname, "orders", orderIds.join(" "));
 await visit(w, `/orders/${orderIds[0].slice(1)}`, "worker", "יוצר"); await shot(w, "s2-03-order-progress");
-await w.goto(BASE + "/inventory"); if (w.url().includes("/inventory")) problems.push("worker reached inventory");
+await gotoGuarded(w, BASE + "/inventory"); if (w.url().includes("/inventory")) problems.push("worker reached inventory");
 
 // manager reorders
 const m = await session("u4@test.local");
@@ -95,11 +95,11 @@ const hist = await visit(s, new URL(s.url()).pathname, "warehouse", "תנועו�
 for (const t of ["קבלת סחורה", "פחת", "ספירה", "תעודה 123", "נשבר"]) if (!hist.includes(t)) problems.push("history missing " + t);
 if (!hist.includes("100")) problems.push("history: stock not 100");
 await shot(s, "s2-07-history");
-await s.goto(BASE + "/board"); if (s.url().includes("/board")) problems.push("warehouse reached board");
+await gotoGuarded(s, BASE + "/board"); if (s.url().includes("/board")) problems.push("warehouse reached board");
 
 // marketer blocked from board; admin home alerts
 const mk = await session("u2@test.local");
-await mk.goto(BASE + "/board"); if (mk.url().includes("/board")) problems.push("marketer reached board");
+await gotoGuarded(mk, BASE + "/board"); if (mk.url().includes("/board")) problems.push("marketer reached board");
 const a = await session("u1@test.local");
 const home = await visit(a, "/", "admin", "התראות"); await shot(a, "s2-08-home");
 if (!home.includes("חוסר")) problems.push("admin home: no shortage alert");
