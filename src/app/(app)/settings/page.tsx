@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getStaff } from "@/lib/auth";
 import { can, ROLE_LABELS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
-import { createProduct, saveBusiness, saveMaterial, savePriceList, savePriceListPrices, saveStaff } from "@/lib/actions/settings";
+import { createProduct, saveBusiness, saveMaterial, savePriceList, savePriceListPrices, saveStaff, saveInitialPassword, resetStaffPassword } from "@/lib/actions/settings";
 import { ImportPanel } from "./import-panel";
 import { WhatsAppSettings } from "./whatsapp-settings";
 import { ActionForm } from "@/components/action-form";
@@ -81,9 +81,24 @@ function RoleBoxes({ selected = [] }: { selected?: Role[] }) {
 
 async function Staff({ myId }: { myId: string }) {
   const supabase = await createClient();
-  const { data: users } = await supabase.from("users").select("*").order("is_active", { ascending: false }).order("full_name");
+  const [{ data: users }, { data: secrets }] = await Promise.all([
+    supabase.from("users").select("*").order("is_active", { ascending: false }).order("full_name"),
+    supabase.from("integration_secrets").select("initial_password").maybeSingle(),
+  ]);
+  const initial = (secrets?.initial_password as string | null) ?? "";
   return (
     <>
+      <Card title="סיסמה ראשונית">
+        <p className="mb-3 text-sm text-muted">
+          כל עובד חדש נכנס עם האימייל שלו והסיסמה הזאת, ובכניסה הראשונה בוחר סיסמה משלו. גם ״איפוס סיסמה״ מחזיר אותו לסיסמה הזאת.
+        </p>
+        <ActionForm action={saveInitialPassword} className="flex flex-wrap items-end gap-3">
+          <Field label="סיסמה ראשונית" hint="לפחות 6 תווים" className="min-w-48 flex-1">
+            <input name="initial_password" defaultValue={initial} className={inputCls} dir="ltr" required minLength={6} autoComplete="off" />
+          </Field>
+          <button className={btnPrimary}>שמירה</button>
+        </ActionForm>
+      </Card>
       <Card title="עובד חדש">
         <ActionForm action={saveStaff} resetOnOk className="grid gap-4 md:grid-cols-3">
           <Field label="שם מלא"><input name="full_name" className={inputCls} required /></Field>
@@ -93,7 +108,7 @@ async function Staff({ myId }: { myId: string }) {
           <div className="md:col-span-3"><button className={btnPrimary}>הוספה</button></div>
         </ActionForm>
         <p className="mt-3 text-sm text-muted">
-          אחרי ההוספה יוצרים לעובד משתמש ב־Supabase: Authentication ← Users ← Add user, עם אותו אימייל, סיסמה ו־Auto Confirm User.
+          {initial ? "העובד יכול להיכנס מיד עם האימייל והסיסמה הראשונית." : "כדי שעובדים חדשים יוכלו להיכנס, קודם שומרים סיסמה ראשונית."}
         </p>
       </Card>
       <Card title="עובדים" className="p-0">
@@ -105,7 +120,13 @@ async function Staff({ myId }: { myId: string }) {
                   <b className={u.is_active ? "" : "text-muted line-through"}>{u.full_name}</b>
                   <span className="text-sm text-muted" dir="ltr">{u.email ?? u.phone}</span>
                   {(u.roles as Role[]).map((r) => <Pill key={r} tone="neutral">{ROLE_LABELS[r]}</Pill>)}
-                  {!u.auth_user_id && <Pill tone="orange">עוד לא נכנס</Pill>}
+                  {!u.is_active ? (
+                    <Pill tone="red">חסום</Pill>
+                  ) : !u.auth_user_id ? (
+                    <Pill tone="orange">אין כניסה</Pill>
+                  ) : u.must_change_password ? (
+                    <Pill tone="orange">עוד לא בחר סיסמה</Pill>
+                  ) : null}
                   <span className="ms-auto text-sm text-accent group-open:hidden">עריכה</span>
                 </summary>
                 <ActionForm action={saveStaff} className="mt-3 grid gap-4 md:grid-cols-3">
@@ -116,11 +137,18 @@ async function Staff({ myId }: { myId: string }) {
                   <div className="md:col-span-3"><RoleBoxes selected={u.roles as Role[]} /></div>
                   <label className="flex items-center gap-1.5">
                     <input type="checkbox" name="is_active" defaultChecked={u.is_active} disabled={u.id === myId} className="size-4 accent-accent" />
-                    פעיל
+                    פעיל <span className="text-sm text-muted">(בלי סימון: הכניסה נחסמת)</span>
                     {u.id === myId && <input type="hidden" name="is_active" value="on" />}
                   </label>
                   <div className="md:col-span-3"><button className={btnPrimary}>שמירה</button></div>
                 </ActionForm>
+                {u.email && u.id !== myId && (
+                  <ActionForm action={resetStaffPassword} className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
+                    <input type="hidden" name="id" value={u.id} />
+                    <button className={btnSecondary}>{u.auth_user_id ? "איפוס סיסמה" : "יצירת כניסה"}</button>
+                    <span className="text-sm text-muted">מחזיר לסיסמה הראשונית, והעובד יבחר סיסמה חדשה בכניסה הבאה.</span>
+                  </ActionForm>
+                )}
               </details>
             </li>
           ))}

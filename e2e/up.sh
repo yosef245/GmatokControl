@@ -28,9 +28,8 @@ psql "$DB" -q -v ON_ERROR_STOP=1 -f "$ROOT/supabase/tests/auth_stub.sql"
 for f in "$ROOT"/supabase/migrations/*.sql; do psql "$DB" -q -v ON_ERROR_STOP=1 -f "$f"; done
 psql "$DB" -q -v ON_ERROR_STOP=1 -f "$ROOT/supabase/seed.sql"
 psql "$DB" -q -v ON_ERROR_STOP=1 <<'SQL'
-alter table auth.users add column if not exists encrypted_password text;
 update public.users set email = 'u' || right(id::text, 1) || '@test.local';
-insert into auth.users (email, email_confirmed_at, encrypted_password) select email, now(), 'pw' from public.users;
+insert into auth.users (email, email_confirmed_at, encrypted_password) select email, now(), extensions.crypt('pw', extensions.gen_salt('bf', 4)) from public.users;
 update public.integration_secrets set whatsapp_webhook_token = 'e2e-verify-token';
 SQL
 cat > "$W/pgrst.conf" <<CONF

@@ -2,10 +2,14 @@ import { getStaff } from "@/lib/auth";
 import { navFor, ROLE_LABELS } from "@/lib/roles";
 import { NavLinks } from "@/components/nav-links";
 import { BrandMark } from "@/components/brand-mark";
+import { ActionForm } from "@/components/action-form";
+import { btnPrimary, Field, inputCls } from "@/components/ui";
+import { changePassword } from "@/lib/actions/account";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const staff = await getStaff();
   if (!staff) return <NoAccess />;
+  if (staff.mustChangePassword) return <ChangePassword name={staff.fullName} />;
   const nav = navFor(staff.roles);
 
   return (
@@ -49,6 +53,24 @@ function NoAccess() {
       <p>האימייל שלך לא מופיע ברשימת העובדים. בקשו ממנהל המפעל להוסיף אתכם בהגדרות, ואז היכנסו שוב.</p>
       <form action="/auth/signout" method="post">
         <button className="min-h-11 rounded-lg border border-line bg-surface px-4 font-bold">יציאה</button>
+      </form>
+    </main>
+  );
+}
+
+function ChangePassword({ name }: { name: string }) {
+  return (
+    <main className="mx-auto mt-[10vh] flex max-w-md flex-col gap-4 px-4">
+      <div className="self-start"><BrandMark size="lg" /></div>
+      <h1 className="font-display text-3xl text-accent">שלום {name}, בוחרים סיסמה</h1>
+      <p>נכנסת עם הסיסמה הראשונית. בחר/י סיסמה משלך, לפחות 6 תווים. איתה נכנסים מעכשיו.</p>
+      <ActionForm action={changePassword} className="flex flex-col gap-3">
+        <Field label="סיסמה חדשה"><input name="password" type="password" autoComplete="new-password" className={inputCls} dir="ltr" required minLength={6} autoFocus /></Field>
+        <Field label="שוב, לאימות"><input name="confirm" type="password" autoComplete="new-password" className={inputCls} dir="ltr" required minLength={6} /></Field>
+        <button className={btnPrimary}>שמירת הסיסמה</button>
+      </ActionForm>
+      <form action="/auth/signout" method="post">
+        <button className="text-sm text-muted underline">זה לא אני, יציאה</button>
       </form>
     </main>
   );

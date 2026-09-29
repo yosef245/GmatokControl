@@ -17,7 +17,7 @@ export function LoginForm() {
     setError(null);
     const { error } = await createClient().auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
-    if (error) return setError("האימייל או הסיסמה שגויים.");
+    if (error) return setError(error.code === "user_banned" ? "הכניסה שלך נחסמה. פנו למנהל המפעל." : "האימייל או הסיסמה שגויים.");
     router.replace("/");
     router.refresh();
   }
