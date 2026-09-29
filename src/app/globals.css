@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/* Chocolate house palette: cocoa brown accent, praline gold highlights, warm neutrals.
+   A stand-in until the brand colours and logo arrive. */
+:root {
+  --bg: #f8f4f0;
+  --surface: #ffffff;
+  --sunken: #f1eae3;
+  --line: #e4d8cd;
+  --fg: #2a1b14;
+  --muted: #7a665a;
+  --accent: #6b3a24;
+  --accent-soft: #f1e4d8;
+  --on-accent: #fff8f0;
+  --gold: #b8893a;
+  --ok: #2f7d4f;
+  --ok-bg: #e3f2e8;
+  --warn: #a95f06;
+  --warn-bg: #fcefd9;
+  --bad: #c2322f;
+  --bad-bg: #fbe3e2;
+  --info: #2d6cb0;
+  --info-bg: #e2edf9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17110d;
+    --surface: #221912;
+    --sunken: #1c140f;
+    --line: #3a2c22;
+    --fg: #f4eadf;
+    --muted: #b19f90;
+    --accent: #d9a46e;
+    --accent-soft: #3a2819;
+    --on-accent: #1c120b;
+    --gold: #d8b060;
+    --ok: #62c489;
+    --ok-bg: #15301f;
+    --warn: #f0a94a;
+    --warn-bg: #35270f;
+    --bad: #f27b77;
+    --bad-bg: #3a1716;
+    --info: #7db4ee;
+    --info-bg: #142a40;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-gold: var(--gold);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --font-sans: var(--font-body), system-ui, sans-serif;
+  --font-display: var(--font-display-face), var(--font-body), sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
