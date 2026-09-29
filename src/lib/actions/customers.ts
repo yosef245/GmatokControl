@@ -17,7 +17,9 @@ export async function saveCustomer(_: ActionResult, d: FormData): Promise<Action
     phone: text(d, "phone"),
     type: TYPES.includes(text(d, "type")) ? text(d, "type") : "private",
     notes: optional(d, "notes"),
-    ...(isAdmin ? { assigned_marketer_id: optional(d, "assigned_marketer_id") } : id ? {} : { assigned_marketer_id: me.id }),
+    ...(isAdmin
+      ? { assigned_marketer_id: optional(d, "assigned_marketer_id"), price_list_id: optional(d, "price_list_id") }
+      : id ? {} : { assigned_marketer_id: me.id }),
   };
   if (!row.name) return { error: "חסר שם לקוח." };
   if (!row.phone) return { error: "חסר טלפון." };

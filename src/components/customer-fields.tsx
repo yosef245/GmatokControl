@@ -7,9 +7,18 @@ export interface CustomerValues {
   type?: string;
   notes?: string | null;
   assigned_marketer_id?: string | null;
+  price_list_id?: string | null;
 }
 
-export function CustomerFields({ c = {}, marketers }: { c?: CustomerValues; marketers?: { id: string; full_name: string }[] }) {
+export function CustomerFields({
+  c = {},
+  marketers,
+  priceLists,
+}: {
+  c?: CustomerValues;
+  marketers?: { id: string; full_name: string }[];
+  priceLists?: { id: string; name: string }[];
+}) {
   return (
     <>
       <Field label="שם הלקוח / העסק"><input name="name" defaultValue={c.name} className={inputCls} required /></Field>
@@ -26,6 +35,14 @@ export function CustomerFields({ c = {}, marketers }: { c?: CustomerValues; mark
           <select name="assigned_marketer_id" defaultValue={c.assigned_marketer_id ?? ""} className={inputCls}>
             <option value="">ללא</option>
             {marketers.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+          </select>
+        </Field>
+      )}
+      {priceLists && (
+        <Field label="מחירון" hint="המחירים שהלקוח מקבל בהזמנה חדשה">
+          <select name="price_list_id" defaultValue={c.price_list_id ?? ""} className={inputCls}>
+            <option value="">מחיר רגיל</option>
+            {priceLists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </Field>
       )}

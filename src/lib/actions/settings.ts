@@ -6,6 +6,7 @@ import { createClient } from "../supabase/server";
 import type { Role } from "../domain/types";
 import { ROLE_LABELS } from "../roles";
 import { dbError, number, optional, requireStaff, text, type ActionResult } from "./result";
+import { IMPORT_KINDS, parseSheet, type ImportKind, type ImportRow } from "../import";
 
 const ROLES = Object.keys(ROLE_LABELS) as Role[];
 
@@ -125,4 +126,74 @@ export async function removeRecipeLine(d: FormData) {
   const productId = text(d, "product_id");
   await supabase.from("recipes").delete().eq("id", text(d, "id"));
   revalidatePath(`/settings/products/${productId}`);
+}
+
+/** Creates a price list, or renames / (de)activates an existing one. */
+export async function savePriceList(_: ActionResult, d: FormData): Promise<ActionResult> {
+  await requireStaff("manageSettings");
+  const id = optional(d, "id");
+  const name = text(d, "name");
+  if (!name) return { error: "חסר שם למחירון." };
+  const row = { name, notes: optional(d, "notes"), ...(id ? { is_active: d.get("is_active") === "on" } : {}) };
+  const supabase = await createClient();
+  const { error } = id
+    ? await supabase.from("price_lists").update(row).eq("id", id)
+    : await supabase.from("price_lists").insert(row);
+  if (error) return { error: error.code === "23505" ? "כבר יש מחירון בשם הזה." : dbError(error) };
+  revalidatePath("/settings");
+  return { ok: id ? "נשמר." : "המחירון נוסף. עכשיו ממלאים בו מחירים." };
+}
+
+/** Saves a price list's prices: a filled field sets the product's price on the list, an empty one removes it. */
+export async function savePriceListPrices(_: ActionResult, d: FormData): Promise<ActionResult> {
+  await requireStaff("manageSettings");
+  const listId = text(d, "id");
+  const set: { price_list_id: string; product_id: string; price: number }[] = [];
+  const clear: string[] = [];
+  for (const [k, v] of d.entries()) {
+    if (!k.startsWith("price_")) continue;
+    const productId = k.slice(6);
+    const raw = String(v).trim().replace(",", ".");
+    if (raw === "") { clear.push(productId); continue; }
+    const price = Number(raw);
+    if (!Number.isFinite(price) || price < 0) return { error: "יש מחיר לא תקין." };
+    set.push({ price_list_id: listId, product_id: productId, price });
+  }
+  const supabase = await createClient();
+  if (set.length) {
+    const { error } = await supabase.from("price_list_items").upsert(set);
+    if (error) return { error: dbError(error) };
+  }
+  if (clear.length) {
+    const { error } = await supabase.from("price_list_items").delete().eq("price_list_id", listId).in("product_id", clear);
+    if (error) return { error: dbError(error) };
+  }
+  revalidatePath("/settings");
+  return { ok: `נשמרו ${set.length} מחירים.` };
+}
+
+/** Imports rows already read and checked in the browser; they are checked again here before the database call. */
+export async function importRows(_: ActionResult, d: FormData): Promise<ActionResult> {
+  await requireStaff("manageSettings");
+  const kind = text(d, "kind");
+  if (!(kind in IMPORT_KINDS)) return { error: "סוג ייבוא לא מוכר." };
+  let rows: ImportRow[];
+  try {
+    rows = JSON.parse(text(d, "rows"));
+  } catch {
+    return { error: "הנתונים לא נקראו. טענו את הקובץ שוב." };
+  }
+  const columns = IMPORT_KINDS[kind as ImportKind].columns;
+  const check = parseSheet(kind as ImportKind, [columns.map((c) => c.label), ...rows.map((r) => columns.map((c) => r[c.key] ?? ""))]);
+  if (check.errors.length || check.missing.length || !check.rows.length) return { error: "יש בקובץ שורות לא תקינות. תקנו וטענו שוב." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("import_rows", { p_kind: kind, p_rows: check.rows });
+  if (error) {
+    const name = /"(.+)"/.exec(error.message)?.[1];
+    if (error.code === "P0002" && name) return { error: `לא נמצא: ${name}. שום דבר לא יובא.` };
+    return { error: dbError(error, "הייבוא נכשל ושום דבר לא נשמר. נסו שוב.") };
+  }
+  revalidatePath("/", "layout");
+  const { added, updated } = data as { added: number; updated: number };
+  return { ok: `יובא: ${added} חדשים, ${updated} עודכנו.` };
 }

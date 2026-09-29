@@ -11,12 +11,15 @@ import { ActionForm } from "@/components/action-form";
 import { btnDanger, btnPrimary, btnSecondary, Card, Field, inputCls, PageTitle, Pill } from "@/components/ui";
 import { STATUS } from "@/lib/status";
 import { duration, fmt, money, when } from "@/lib/format";
+import { loadCouriers } from "@/lib/deliveries";
+import { DeliveryActions } from "../../deliveries/delivery-actions";
 
 const ACTIONS: Record<string, string> = {
   created: "ההזמנה נוצרה",
   updated: "ההזמנה עודכנה",
   cancelled: "ההזמנה בוטלה",
   status_change: "הסטטוס השתנה",
+  courier_assigned: "שובץ שליח",
 };
 
 export default async function OrderPage({ params, searchParams }: PageProps<"/orders/[id]">) {
@@ -33,6 +36,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
   const wa = prices ? orderWhatsApp(o, settings?.business_name ?? "", vatPercent, true) : null;
   const st = STATUS[o.status];
   const local = toIsraelLocal(o.deliveryDate);
+  const delivers = can(staff.roles, "manageDeliveries") && (o.status === "ready_for_delivery" || o.status === "in_transit");
+  const couriers = delivers ? await loadCouriers() : [];
   const remaining = o.items.reduce((s, i) => s + Math.max(0, i.quantity - i.produced) * i.minutes, 0);
 
   return (
@@ -57,6 +62,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
         {wa && <a href={wa} target="_blank" rel="noopener" className={btnPrimary}>שליחת אישור בוואטסאפ</a>}
         {prices && !wa && <span className="text-sm text-muted">מספר הטלפון של הלקוח לא מתאים לוואטסאפ.</span>}
         <Link href={`/print/orders/${o.id}`} target="_blank" className={btnSecondary}>אישור הזמנה להדפסה / PDF</Link>
+        <Link href={`/print/orders/${o.id}?doc=delivery`} target="_blank" className={btnSecondary}>תעודת משלוח</Link>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
@@ -74,6 +80,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
             <dt className="text-muted">כתובת</dt>
             <dd>{o.address ? `${o.address.address}, ${o.address.city}` : "איסוף עצמי"}{o.address?.deliveryNotes && <div className="text-sm text-muted">{o.address.deliveryNotes}</div>}</dd>
             {o.marketer && (<><dt className="text-muted">משווק</dt><dd>{o.marketer}</dd></>)}
+            {o.delivery?.courier && (<><dt className="text-muted">שליח</dt><dd>{o.delivery.courier}{o.delivery.departedAt && ` · יצא ${when(o.delivery.departedAt)}`}</dd></>)}
+            {o.delivery?.deliveredAt && (<><dt className="text-muted">נמסר</dt><dd>{when(o.delivery.deliveredAt)}{o.delivery.receiver && ` · קיבל: ${o.delivery.receiver}`}</dd></>)}
             {o.notes && (<><dt className="text-muted">הערות</dt><dd className="whitespace-pre-line">{o.notes}</dd></>)}
           </dl>
         </Card>
@@ -85,12 +93,21 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
                 <b>{ACTIONS[h.action] ?? h.action}</b>
                 {h.action === "cancelled" && typeof h.details?.reason === "string" && <span>: {h.details.reason}</span>}
                 {h.action === "status_change" && typeof h.details?.to === "string" && <span>: {STATUS[h.details.to as keyof typeof STATUS]?.label ?? h.details.to}</span>}
+                {h.action === "courier_assigned" && typeof h.details?.courier === "string" && <span>: {h.details.courier}</span>}
+                {typeof h.details?.receiver === "string" && <span> (קיבל: {h.details.receiver})</span>}
+                {h.action === "status_change" && typeof h.details?.reason === "string" && <span> ({h.details.reason})</span>}
                 <div className="text-sm text-muted">{when(h.at)}{h.by && ` · ${h.by}`}</div>
               </li>
             ))}
           </ol>
         </Card>
       </div>
+
+      {delivers && (
+        <Card title="משלוח">
+          <DeliveryActions id={o.id} status={o.status} courier={o.delivery?.courier ?? null} pickup={!o.address} couriers={couriers} />
+        </Card>
+      )}
 
       <Card title="מוצרים">
         <div className="overflow-x-auto">

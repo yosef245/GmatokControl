@@ -10,6 +10,7 @@ export interface CustomerOption {
   id: string;
   name: string;
   phone: string;
+  priceListId: string | null;
   addresses: { id: string; label: string; isDefault: boolean }[];
 }
 export interface ProductOption {
@@ -35,12 +36,14 @@ export function OrderForm({
   initialCustomer,
   defaultDate,
   vatPercent,
+  priceLists,
 }: {
   customers: CustomerOption[];
   products: ProductOption[];
   initialCustomer?: string;
   defaultDate: string;
   vatPercent: number;
+  priceLists: Record<string, { name: string; prices: Record<string, number> }>;
 }) {
   const [state, run, pending] = useActionState(createOrder, null);
   const [customerId, setCustomerId] = useState(initialCustomer ?? "");
@@ -51,11 +54,13 @@ export function OrderForm({
   const shown = search
     ? customers.filter((c) => c.name.includes(search) || c.phone.replace(/\D/g, "").includes(search.replace(/\D/g, "") || "~"))
     : customers;
+  const list = customer?.priceListId ? priceLists[customer.priceListId] : undefined;
+  /** The customer's price for a product: their price list first, then the regular price. */
+  const basePrice = (productId: string) => list?.prices[productId] ?? byId.get(productId)?.price ?? 0;
   const categories = [...new Set(products.map((p) => p.category ?? "אחר"))];
 
   const priced = lines.map((l) => {
-    const p = byId.get(l.productId);
-    const price = l.unitPrice === "" ? (p?.price ?? 0) : Number(l.unitPrice);
+    const price = l.unitPrice === "" ? basePrice(l.productId) : Number(l.unitPrice);
     return { ...l, price, total: (Number(l.quantity) || 0) * price };
   });
   const subtotal = priced.reduce((s, l) => s + l.total, 0);
@@ -101,7 +106,7 @@ export function OrderForm({
           </p>
         </Card>
 
-        <Card title="מוצרים">
+        <Card title={list ? `מוצרים · מחירון ${list.name}` : "מוצרים"}>
           <div className="flex flex-col gap-3">
             {priced.map((l, i) => (
               <div key={l.key} className="grid grid-cols-[1fr_5rem] gap-2 border-b border-line pb-3 md:grid-cols-[2fr_6rem_7rem_2fr_auto] md:items-end">
@@ -119,7 +124,7 @@ export function OrderForm({
                   <input type="number" min="1" step="1" inputMode="numeric" value={l.quantity} onChange={(e) => update(l.key, { quantity: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label="מחיר ליח׳">
-                  <input type="number" min="0" step="0.01" value={l.unitPrice} placeholder={byId.get(l.productId)?.price.toString() ?? ""} onChange={(e) => update(l.key, { unitPrice: e.target.value })} className={inputCls} />
+                  <input type="number" min="0" step="0.01" value={l.unitPrice} placeholder={l.productId ? basePrice(l.productId).toString() : ""} onChange={(e) => update(l.key, { unitPrice: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label="הערה לשורה" className="col-span-2 md:col-span-1">
                   <input value={l.notes} onChange={(e) => update(l.key, { notes: e.target.value })} placeholder="מיתוג, הקדשה, צבע סרט" className={inputCls} />

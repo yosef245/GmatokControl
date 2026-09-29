@@ -6,18 +6,24 @@ import { loadOrder } from "@/lib/order-detail";
 import { fmt, fullWhen, money } from "@/lib/format";
 import { PrintButton } from "./print-button";
 
-export const metadata = { title: "אישור הזמנה" };
 
-export default async function PrintOrderPage({ params }: PageProps<"/print/orders/[id]">) {
+export async function generateMetadata({ searchParams }: PageProps<"/print/orders/[id]">) {
+  const { doc } = await searchParams;
+  return { title: doc === "delivery" ? "תעודת משלוח" : "אישור הזמנה" };
+}
+
+export default async function PrintOrderPage({ params, searchParams }: PageProps<"/print/orders/[id]">) {
   const staff = await getStaff();
   if (!staff) notFound();
   const { id } = await params;
+  const { doc } = await searchParams;
+  const deliveryNote = doc === "delivery";
   const o = await loadOrder(Number(id));
   if (!o) notFound();
   const supabase = await createClient();
   const { data: s } = await supabase.from("settings").select("*").single();
   const vat = Number(s?.vat_percent ?? 18);
-  const prices = can(staff.roles, "seePrices");
+  const prices = !deliveryNote && can(staff.roles, "seePrices");
   const printed = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", dateStyle: "short" }).format(o.createdAt);
 
   return (
@@ -35,7 +41,7 @@ export default async function PrintOrderPage({ params }: PageProps<"/print/order
           </div>
         </div>
         <div className="text-end">
-          <div className="text-xl font-bold">אישור הזמנה</div>
+          <div className="text-xl font-bold">{deliveryNote ? "תעודת משלוח" : "אישור הזמנה"}</div>
           <div>מס׳ {o.id}</div>
           <div className="text-sm">תאריך הזמנה: {printed}</div>
         </div>
@@ -53,6 +59,7 @@ export default async function PrintOrderPage({ params }: PageProps<"/print/order
           <div>{fullWhen(o.deliveryDate)}</div>
           <div>{o.address ? `${o.address.address}, ${o.address.city}` : "איסוף עצמי"}</div>
           {o.address?.deliveryNotes && <div>{o.address.deliveryNotes}</div>}
+          {deliveryNote && o.delivery?.courier && <div>שליח: {o.delivery.courier}</div>}
         </div>
       </section>
 
@@ -86,6 +93,13 @@ export default async function PrintOrderPage({ params }: PageProps<"/print/order
         </dl>
       )}
       {o.notes && <p className="mt-6 text-sm"><b>הערות: </b>{o.notes}</p>}
+      {deliveryNote && (
+        <div className="mt-16 grid grid-cols-3 gap-6 text-sm">
+          {["שם המקבל", "חתימה", "תאריך ושעה"].map((l) => (
+            <div key={l} className="border-t border-[#2a1b14] pt-1">{l}</div>
+          ))}
+        </div>
+      )}
       <p className="mt-10 text-center text-xs text-[#7a665a]">תודה שבחרתם ב{s?.business_name}</p>
     </main>
   );

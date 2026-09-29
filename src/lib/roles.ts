@@ -42,6 +42,7 @@ export function navFor(roles: readonly Role[]): NavItem[] {
   if (can(roles, "manageDeliveries")) items.push({ href: "/deliveries", label: "משלוחים", icon: "deliveries" });
   if (can(roles, "manageStock")) items.push({ href: "/inventory", label: "מלאי", icon: "inventory" });
   if (can(roles, "manageCustomers")) items.push({ href: "/customers", label: "לקוחות", icon: "customers" });
+  if (can(roles, "seePrices")) items.push({ href: "/reports", label: "דוחות", icon: "reports" });
   if (can(roles, "manageSettings")) items.push({ href: "/settings", label: "הגדרות", icon: "settings" });
   return items;
 }

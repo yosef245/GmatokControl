@@ -195,6 +195,131 @@ select pg_temp.login('050-0000004');
 insert into public.batch_ranks (product_id, batch_day, rank, updated_by)
 values ((select id from public.products limit 1), current_date, 1, public.current_profile_id());
 
+-- 7d. deliveries: courier, departure, return and hand-over by the warehouse; others may not
+select pg_temp.login('050-0000006');
+do $$
+declare oid int;
+begin
+  select id into oid from public.orders where status = 'ready_for_delivery' order by id limit 1;
+  assert oid is not null, 'a ready order exists from the production checks';
+  begin
+    perform public.delivery_step(oid, 'depart');
+    assert false, 'departure needs a courier';
+  exception when invalid_parameter_value then null;
+  end;
+  assert public.delivery_step(oid, 'assign', null, ' גט טקסי ') = 'ready_for_delivery', 'assigning keeps the status';
+  assert (select courier_name from public.deliveries where order_id = oid) = 'גט טקסי', 'courier name saved';
+  perform public.delivery_step(oid, 'assign', '00000000-0000-4000-8000-100000000006');
+  assert (select courier_user_id from public.deliveries where order_id = oid) = '00000000-0000-4000-8000-100000000006', 'staff courier replaces the name';
+  assert public.delivery_step(oid, 'depart') = 'in_transit', 'departs';
+  assert (select departed_at from public.deliveries where order_id = oid) is not null, 'departure time saved';
+  assert public.delivery_step(oid, 'return', p_notes => 'לא היה בבית') = 'ready_for_delivery', 'returns';
+  perform public.delivery_step(oid, 'depart');
+  assert public.delivery_step(oid, 'deliver', p_receiver_name => 'משה') = 'delivered', 'delivers';
+  assert (select receiver_name from public.deliveries where order_id = oid) = 'משה', 'receiver saved';
+  assert (select count(*) from public.audit_logs where order_id = oid and action_type = 'status_change' and details->>'to' = 'in_transit') = 2, 'each departure audited';
+  assert exists (select 1 from public.audit_logs where order_id = oid and details->>'receiver' = 'משה'), 'hand-over audited with receiver';
+  begin
+    perform public.delivery_step(oid, 'deliver');
+    assert false, 'cannot deliver twice';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.delivery_step((select id from public.orders where status = 'pending_approval' limit 1), 'assign', null, 'x');
+    assert false, 'only ready orders get a courier';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+select pg_temp.login('050-0000005');
+do $$ begin
+  begin
+    perform public.delivery_step((select id from public.orders limit 1), 'deliver');
+    assert false, 'worker must not deliver';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+-- 7e. price lists: an order line without a price takes the customer's list price, then the product price
+select pg_temp.login('050-0000001');
+do $$
+declare lst uuid; cust uuid; p1 uuid; p2 uuid;
+begin
+  select id into cust from public.customers where assigned_marketer_id = '00000000-0000-4000-8000-100000000002' limit 1;
+  select id into p1 from public.products where is_active order by name limit 1;
+  select id into p2 from public.products where is_active order by name offset 1 limit 1;
+  insert into public.price_lists (name) values ('סיטונאי') returning id into lst;
+  insert into public.price_list_items values (lst, p1, 1.5);
+  update public.customers set price_list_id = lst where id = cust;
+  assert public.customer_price(cust, p1) = 1.5, 'list price';
+  assert public.customer_price(cust, p2) = (select price from public.products where id = p2), 'falls back to product price';
+end $$;
+select pg_temp.login('050-0000002');
+do $$
+declare cust uuid; p1 uuid; p2 uuid; new_id int;
+begin
+  select id into cust from public.customers where price_list_id is not null limit 1;
+  select id into p1 from public.products where is_active order by name limit 1;
+  select id into p2 from public.products where is_active order by name offset 1 limit 1;
+  new_id := public.create_order(cust, null, now() + interval '3 days', false, null,
+    jsonb_build_array(jsonb_build_object('product_id', p1, 'quantity', 10), jsonb_build_object('product_id', p2, 'quantity', 1)));
+  assert (select total_amount from public.orders where id = new_id) = 15 + (select price from public.products where id = p2), 'order total uses the price list';
+  assert exists (select 1 from public.price_lists), 'marketer reads price lists';
+  begin
+    insert into public.price_lists (name) values ('של משווק');
+    assert false, 'marketer must not create price lists';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select pg_temp.login('050-0000005');
+do $$ begin
+  assert not exists (select 1 from public.price_lists), 'production does not see price lists';
+end $$;
+
+-- 7f. import: adds new rows, updates matches, records opening stock, and fails as a whole on a bad row
+select pg_temp.login('050-0000001');
+do $$
+declare res jsonb; before int;
+begin
+  res := public.import_rows('products', '[{"name":"עוגיית שוקולד צ׳יפס","category":"עוגיות","price":6.5,"minutes":1},
+                                          {"name":" עוגיית שוקולד צ׳יפס ","price":7}]');
+  assert res = '{"added": 1, "updated": 1}', 'products: one added then updated, got ' || res;
+  assert (select price from public.products where name = 'עוגיית שוקולד צ׳יפס') = 7, 'second row updates the price';
+
+  res := public.import_rows('materials', '[{"name":"שקדים","unit":"ק״ג","stock":12,"minimum":3,"supplier_name":"אגוזי הגליל"}]');
+  assert (select stock_quantity from public.raw_materials where name = 'שקדים') = 12, 'opening stock';
+  assert exists (select 1 from public.stock_movements m join public.raw_materials r on r.id = m.raw_material_id
+                  where r.name = 'שקדים' and m.movement_type = 'opening'), 'opening movement recorded';
+  perform public.import_rows('materials', '[{"name":"שקדים","stock":10}]');
+  assert (select stock_quantity from public.raw_materials where name = 'שקדים') = 10, 'reimport counts the stock';
+  assert (select unit_of_measure from public.raw_materials where name = 'שקדים') = 'ק״ג', 'unit kept';
+
+  res := public.import_rows('customers', '[{"name":"קפה גלית","phone":"052-7777777","type":"business","address":"הרצל 5","city":"חיפה","price_list":"סיטונאי","marketer_email":""},
+                                           {"name":"קפה גלית בע״מ","phone":"+972 52 777 7777","address":"הרצל 5","city":"חיפה"}]');
+  assert res = '{"added": 1, "updated": 1}', 'customers matched by phone, got ' || res;
+  assert (select count(*) from public.customer_addresses a join public.customers c on c.id = a.customer_id where c.phone = '052-7777777') = 1, 'same address not added twice';
+  assert (select name from public.customers where phone = '052-7777777') = 'קפה גלית בע״מ', 'name updated';
+  assert (select l.name from public.customers c join public.price_lists l on l.id = c.price_list_id where c.phone = '052-7777777') = 'סיטונאי', 'price list set';
+
+  res := public.import_rows('prices', '[{"price_list":"אירועים","product":"עוגיית שוקולד צ׳יפס","price":5}]');
+  assert res = '{"added": 1, "updated": 0}', 'prices: new list and item, got ' || res;
+
+  select count(*) into before from public.products;
+  begin
+    perform public.import_rows('prices', '[{"price_list":"אירועים","product":"עוגיית שוקולד צ׳יפס","price":4},{"price_list":"אירועים","product":"אין כזה","price":1}]');
+    assert false, 'unknown product must fail';
+  exception when no_data_found then null;
+  end;
+  assert (select i.price from public.price_list_items i join public.price_lists l on l.id = i.price_list_id where l.name = 'אירועים') = 5, 'failed import changes nothing';
+end $$;
+select pg_temp.login('050-0000002');
+do $$ begin
+  begin
+    perform public.import_rows('products', '[]');
+    assert false, 'marketer must not import';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 -- 8. email login: a confirmed email links to the staff profile with that email, an unconfirmed one does not
 reset role;
 update public.users set email = 'Dana@Example.com' where id = '00000000-0000-4000-8000-100000000002';

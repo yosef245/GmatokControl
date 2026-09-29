@@ -1,5 +1,6 @@
 import { createClient } from "./supabase/server";
 import type { AlertColor, Order, OrderStatus, Product, ShiftSettings } from "./domain/types";
+import type { ReportOrder } from "./domain/report";
 
 export interface MaterialRow {
   id: string;
@@ -119,4 +120,36 @@ export async function loadRecentMarks(): Promise<RecentMark[]> {
     performedBy: l.performed_by,
     performerName: (l.users as unknown as { full_name: string } | null)?.full_name ?? null,
   }));
+}
+
+/** Orders for the reports page: created since `since`, or changed since then (to catch deliveries). */
+export async function loadReportOrders(since: Date): Promise<ReportOrder[]> {
+  const supabase = await createClient();
+  const iso = since.toISOString();
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
+      `id, created_at, delivery_date, status, total_amount,
+       users!orders_marketer_id_fkey(full_name), deliveries(delivered_at),
+       order_items(quantity, products(name))`,
+    )
+    .or(`created_at.gte.${iso},updated_at.gte.${iso}`);
+  if (error) throw error;
+  return (data ?? []).map((o) => {
+    const dv = o.deliveries as unknown as { delivered_at: string | null } | { delivered_at: string | null }[] | null;
+    const d = Array.isArray(dv) ? dv[0] : dv;
+    return {
+      id: o.id,
+      createdAt: new Date(o.created_at),
+      deliveryDate: new Date(o.delivery_date),
+      deliveredAt: d?.delivered_at ? new Date(d.delivered_at) : null,
+      status: o.status as OrderStatus,
+      total: n(o.total_amount),
+      marketer: (o.users as unknown as { full_name: string } | null)?.full_name ?? null,
+      items: (o.order_items as unknown as { quantity: number; products: { name: string } }[]).map((i) => ({
+        product: i.products.name,
+        quantity: i.quantity,
+      })),
+    };
+  });
 }
