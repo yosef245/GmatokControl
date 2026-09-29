@@ -1,6 +1,7 @@
 import { getStaff } from "@/lib/auth";
 import { navFor, ROLE_LABELS } from "@/lib/roles";
 import { NavLinks } from "@/components/nav-links";
+import { BrandMark } from "@/components/brand-mark";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const staff = await getStaff();
@@ -10,15 +11,17 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="min-h-screen md:grid md:grid-cols-[220px_1fr]">
       <nav aria-label="ניווט" className="sticky top-0 hidden h-screen flex-col gap-1 border-e border-line bg-surface px-3 py-5 md:flex">
-        <div className="mb-2 border-b-2 border-gold px-2.5 pb-4">
-          <div className="font-display text-xl text-accent">גוונים של מתוק</div>
+        <div className="mb-2 flex flex-col items-start gap-2 border-b border-line px-2.5 pb-4">
+          <BrandMark />
           <div className="text-xs text-muted">ניהול הזמנות וייצור</div>
         </div>
         <NavLinks items={nav} variant="rail" />
       </nav>
       <div className="min-w-0 pb-24 md:pb-10">
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">
-          <span className="font-display text-lg text-accent md:hidden">גוונים של מתוק</span>
+          <span className="md:hidden">
+            <BrandMark size="sm" />
+          </span>
           <form action="/auth/signout" method="post" className="ms-auto">
             <button className="flex items-center gap-2 rounded-full border border-line bg-bg py-1 ps-3 pe-1.5 text-sm" title="יציאה">
               <span>

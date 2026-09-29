@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "הזמנות, לוח ייצור, מלאי חומרי גלם ומשלוחים",
 };
 
-export const viewport: Viewport = { themeColor: "#6b3a24", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#2a0f12", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

@@ -16,6 +16,7 @@ describe("permissions", () => {
   it("builds the menu per role", () => {
     expect(navFor(["production_worker"]).map((n) => n.href)).toEqual(["/", "/board"]);
     expect(navFor(["warehouse"]).map((n) => n.href)).toEqual(["/", "/deliveries", "/inventory"]);
-    expect(navFor(["admin"])).toHaveLength(8);
+    expect(navFor(["admin"])).toHaveLength(9);
+    expect(navFor(["marketer"]).map((n) => n.href)).toContain("/reports");
   });
 });

@@ -32,20 +32,6 @@ export function PageTitle({ children, sub }: { children: ReactNode; sub?: ReactN
   );
 }
 
-export function ComingSoon({ title, sprint, children }: { title: string; sprint: number; children: ReactNode }) {
-  return (
-    <>
-      <PageTitle>{title}</PageTitle>
-      <Card>
-        <p className="mb-2">
-          <Pill tone="blue">בפיתוח · ספרינט {sprint}</Pill>
-        </p>
-        <p className="text-muted">{children}</p>
-      </Card>
-    </>
-  );
-}
-
 export const inputCls =
   "min-h-11 w-full rounded-lg border border-line bg-surface px-3 focus:border-accent focus:outline-none disabled:opacity-60";
 export const btnPrimary =

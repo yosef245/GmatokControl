@@ -11,18 +11,25 @@ import { ActionForm } from "@/components/action-form";
 import { btnDanger, btnPrimary, btnSecondary, Card, Field, inputCls, PageTitle, Pill } from "@/components/ui";
 import { STATUS } from "@/lib/status";
 import { duration, fmt, money, when } from "@/lib/format";
+import { loadCouriers } from "@/lib/deliveries";
+import { waConfigured } from "@/lib/wa-api";
+import { loadWaMessages } from "@/lib/wa-log";
+import { sendOrderWhatsApp } from "@/lib/actions/whatsapp";
+import { WaMessages } from "@/components/wa-messages";
+import { DeliveryActions } from "../../deliveries/delivery-actions";
 
 const ACTIONS: Record<string, string> = {
   created: "ההזמנה נוצרה",
   updated: "ההזמנה עודכנה",
   cancelled: "ההזמנה בוטלה",
   status_change: "הסטטוס השתנה",
+  courier_assigned: "שובץ שליח",
 };
 
 export default async function OrderPage({ params, searchParams }: PageProps<"/orders/[id]">) {
   const staff = (await getStaff())!;
   const { id } = await params;
-  const { created } = await searchParams;
+  const { created, wa: waResult } = await searchParams;
   const o = await loadOrder(Number(id));
   if (!o) notFound();
   const supabase = await createClient();
@@ -33,6 +40,15 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
   const wa = prices ? orderWhatsApp(o, settings?.business_name ?? "", vatPercent, true) : null;
   const st = STATUS[o.status];
   const local = toIsraelLocal(o.deliveryDate);
+  const delivers = can(staff.roles, "manageDeliveries") && (o.status === "ready_for_delivery" || o.status === "in_transit");
+  const couriers = delivers ? await loadCouriers() : [];
+  const api = waConfigured();
+  const waSend = {
+    confirm: can(staff.roles, "createOrder") && o.status !== "cancelled",
+    transit: can(staff.roles, "manageDeliveries") && o.status === "in_transit",
+    delivered: can(staff.roles, "manageDeliveries") && o.status === "delivered",
+  };
+  const messages = await loadWaMessages({ orderId: o.id });
   const remaining = o.items.reduce((s, i) => s + Math.max(0, i.quantity - i.produced) * i.minutes, 0);
 
   return (
@@ -49,14 +65,21 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
       {created && (
         <div className="rounded-xl border border-ok/40 bg-ok-bg p-4">
           <b className="text-ok">ההזמנה נוצרה ונכנסה לתור הייצור.</b>
-          <p className="mt-1 text-sm">עכשיו אפשר לשלוח ללקוח אישור בוואטסאפ, ולהדפיס או לשמור אישור כ־PDF.</p>
+          <p className="mt-1 text-sm">
+            {waResult === "sent"
+              ? "אישור ההזמנה נשלח ללקוח בוואטסאפ. אפשר גם להדפיס או לשמור אישור כ־PDF."
+              : waResult === "failed"
+                ? "שליחת האישור בוואטסאפ נכשלה. אפשר לשלוח שוב מלמטה, או להדפיס או לשמור אישור כ־PDF."
+                : "עכשיו אפשר לשלוח ללקוח אישור בוואטסאפ, ולהדפיס או לשמור אישור כ־PDF."}
+          </p>
         </div>
       )}
 
       <div className="flex flex-wrap gap-2">
-        {wa && <a href={wa} target="_blank" rel="noopener" className={btnPrimary}>שליחת אישור בוואטסאפ</a>}
+        {wa && <a href={wa} target="_blank" rel="noopener" className={api ? btnSecondary : btnPrimary}>{api ? "פתיחה בוואטסאפ" : "שליחת אישור בוואטסאפ"}</a>}
         {prices && !wa && <span className="text-sm text-muted">מספר הטלפון של הלקוח לא מתאים לוואטסאפ.</span>}
         <Link href={`/print/orders/${o.id}`} target="_blank" className={btnSecondary}>אישור הזמנה להדפסה / PDF</Link>
+        <Link href={`/print/orders/${o.id}?doc=delivery`} target="_blank" className={btnSecondary}>תעודת משלוח</Link>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
@@ -74,6 +97,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
             <dt className="text-muted">כתובת</dt>
             <dd>{o.address ? `${o.address.address}, ${o.address.city}` : "איסוף עצמי"}{o.address?.deliveryNotes && <div className="text-sm text-muted">{o.address.deliveryNotes}</div>}</dd>
             {o.marketer && (<><dt className="text-muted">משווק</dt><dd>{o.marketer}</dd></>)}
+            {o.delivery?.courier && (<><dt className="text-muted">שליח</dt><dd>{o.delivery.courier}{o.delivery.departedAt && ` · יצא ${when(o.delivery.departedAt)}`}</dd></>)}
+            {o.delivery?.deliveredAt && (<><dt className="text-muted">נמסר</dt><dd>{when(o.delivery.deliveredAt)}{o.delivery.receiver && ` · קיבל: ${o.delivery.receiver}`}</dd></>)}
             {o.notes && (<><dt className="text-muted">הערות</dt><dd className="whitespace-pre-line">{o.notes}</dd></>)}
           </dl>
         </Card>
@@ -85,12 +110,35 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
                 <b>{ACTIONS[h.action] ?? h.action}</b>
                 {h.action === "cancelled" && typeof h.details?.reason === "string" && <span>: {h.details.reason}</span>}
                 {h.action === "status_change" && typeof h.details?.to === "string" && <span>: {STATUS[h.details.to as keyof typeof STATUS]?.label ?? h.details.to}</span>}
+                {h.action === "courier_assigned" && typeof h.details?.courier === "string" && <span>: {h.details.courier}</span>}
+                {typeof h.details?.receiver === "string" && <span> (קיבל: {h.details.receiver})</span>}
+                {h.action === "status_change" && typeof h.details?.reason === "string" && <span> ({h.details.reason})</span>}
                 <div className="text-sm text-muted">{when(h.at)}{h.by && ` · ${h.by}`}</div>
               </li>
             ))}
           </ol>
         </Card>
       </div>
+
+      {delivers && (
+        <Card title="משלוח">
+          <DeliveryActions id={o.id} status={o.status} courier={o.delivery?.courier ?? null} pickup={!o.address} couriers={couriers} />
+        </Card>
+      )}
+
+      {(api || messages.length > 0) && (
+        <Card title="הודעות וואטסאפ ללקוח">
+          <WaMessages messages={messages} />
+          {api && (Object.keys(waSend) as (keyof typeof waSend)[]).some((k) => waSend[k]) && (
+            <ActionForm action={sendOrderWhatsApp} className="mt-3 flex flex-wrap items-center gap-2">
+              <input type="hidden" name="order_id" value={o.id} />
+              {waSend.confirm && <button name="kind" value="confirm" className={btnPrimary}>שליחת אישור הזמנה</button>}
+              {waSend.transit && <button name="kind" value="transit" className={btnSecondary}>הודעה: ההזמנה בדרך</button>}
+              {waSend.delivered && <button name="kind" value="delivered" className={btnSecondary}>הודעה: ההזמנה נמסרה</button>}
+            </ActionForm>
+          )}
+        </Card>
+      )}
 
       <Card title="מוצרים">
         <div className="overflow-x-auto">

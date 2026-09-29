@@ -35,11 +35,11 @@ export default async function HomePage() {
     batches.filter((b) => b.short).flatMap((b) => b.entries.map((e) => e.order.id)),
   );
 
-  const kpis: { label: string; value: number; tone: string }[] = [
+  const kpis: { label: string; value: number; tone: string; href?: string }[] = [
     { label: "הזמנות פתוחות", value: open.length, tone: "text-fg" },
     { label: "באיחור או בסיכון", value: late.length + atRisk.length, tone: late.length + atRisk.length ? "text-bad" : "text-ok" },
     ...(materials.length ? [{ label: "חומרים באדום", value: red.length, tone: red.length ? "text-bad" : "text-ok" }] : []),
-    { label: "מוכנות למשלוח", value: ready.length, tone: "text-ok" },
+    { label: "מוכנות למשלוח", value: ready.length, tone: "text-ok", href: can(staff.roles, "manageDeliveries") ? "/deliveries" : undefined },
   ];
   const barTone = cap.level === "over" ? "bg-bad" : cap.level === "high" ? "bg-warn" : "bg-ok";
 
@@ -48,12 +48,15 @@ export default async function HomePage() {
       <PageTitle sub={`שלום ${staff.fullName}`}>מבט על</PageTitle>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {kpis.map((k) => (
-          <Card key={k.label}>
-            <div className="text-sm text-muted">{k.label}</div>
-            <div className={`font-display text-3xl ${k.tone}`}>{fmt(k.value)}</div>
-          </Card>
-        ))}
+        {kpis.map((k) => {
+          const card = (
+            <Card key={k.label} className={k.href ? "h-full hover:border-accent" : ""}>
+              <div className="text-sm text-muted">{k.label}</div>
+              <div className={`font-display text-3xl ${k.tone}`}>{fmt(k.value)}</div>
+            </Card>
+          );
+          return k.href ? <Link key={k.label} href={k.href}>{card}</Link> : card;
+        })}
       </div>
 
       {can(staff.roles, "markProduced") && (

@@ -17,6 +17,9 @@ export default async function NewCustomerPage({ searchParams }: PageProps<"/cust
   const { data: marketers } = isAdmin
     ? await supabase.from("users").select("id, full_name").contains("roles", ["marketer"]).eq("is_active", true).order("full_name")
     : { data: undefined };
+  const { data: priceLists } = isAdmin
+    ? await supabase.from("price_lists").select("id, name").eq("is_active", true).order("name")
+    : { data: undefined };
   return (
     <>
       <div>
@@ -26,7 +29,7 @@ export default async function NewCustomerPage({ searchParams }: PageProps<"/cust
       <Card>
         <ActionForm action={saveCustomer} className="grid gap-4 md:grid-cols-2">
           {next === "order" && <input type="hidden" name="next" value="order" />}
-          <CustomerFields marketers={marketers ?? undefined} c={{ assigned_marketer_id: isAdmin ? null : staff.id }} />
+          <CustomerFields marketers={marketers ?? undefined} priceLists={priceLists ?? undefined} c={{ assigned_marketer_id: isAdmin ? null : staff.id }} />
           <h3 className="font-display text-lg text-accent md:col-span-2">כתובת למשלוח</h3>
           <Field label="רחוב ומספר"><input name="address" className={inputCls} /></Field>
           <Field label="עיר"><input name="city" className={inputCls} /></Field>

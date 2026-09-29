@@ -17,11 +17,14 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
   const { id } = await params;
   const isAdmin = staff.roles.includes("admin");
   const supabase = await createClient();
-  const [{ data: c }, { data: orders }, { data: marketers }] = await Promise.all([
+  const [{ data: c }, { data: orders }, { data: marketers }, { data: priceLists }] = await Promise.all([
     supabase.from("customers").select("*, customer_addresses(*)").eq("id", id).maybeSingle(),
     supabase.from("orders").select("id, delivery_date, status, total_amount").eq("customer_id", id).order("delivery_date", { ascending: false }).limit(30),
     isAdmin
       ? supabase.from("users").select("id, full_name").contains("roles", ["marketer"]).order("full_name")
+      : Promise.resolve({ data: undefined }),
+    isAdmin
+      ? supabase.from("price_lists").select("id, name").eq("is_active", true).order("name")
       : Promise.resolve({ data: undefined }),
   ]);
   if (!c) notFound();
@@ -42,7 +45,7 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
       <Card title="פרטים">
         <ActionForm action={saveCustomer} className="grid gap-4 md:grid-cols-2">
           <input type="hidden" name="id" value={c.id} />
-          <CustomerFields c={c} marketers={marketers ?? undefined} />
+          <CustomerFields c={c} marketers={marketers ?? undefined} priceLists={priceLists ?? undefined} />
           {canEdit && <div className="md:col-span-2"><button className={btnPrimary}>שמירה</button></div>}
         </ActionForm>
       </Card>

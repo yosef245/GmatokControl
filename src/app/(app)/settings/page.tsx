@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { getStaff } from "@/lib/auth";
 import { can, ROLE_LABELS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
-import { createProduct, saveBusiness, saveMaterial, saveStaff } from "@/lib/actions/settings";
+import { createProduct, saveBusiness, saveMaterial, savePriceList, savePriceListPrices, saveStaff } from "@/lib/actions/settings";
+import { ImportPanel } from "./import-panel";
+import { WhatsAppSettings } from "./whatsapp-settings";
 import { ActionForm } from "@/components/action-form";
 import { btnPrimary, btnSecondary, Card, Field, inputCls, PageTitle, Pill, Tabs } from "@/components/ui";
 import { duration, fmt, money } from "@/lib/format";
@@ -14,6 +16,9 @@ const TABS = [
   { key: "staff", label: "עובדים" },
   { key: "products", label: "מוצרים ומתכונים" },
   { key: "materials", label: "חומרי גלם" },
+  { key: "prices", label: "מחירונים" },
+  { key: "import", label: "ייבוא מאקסל" },
+  { key: "whatsapp", label: "וואטסאפ" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -30,6 +35,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
       {tab === "staff" && <Staff myId={staff.id} />}
       {tab === "products" && <Products />}
       {tab === "materials" && <Materials />}
+      {tab === "prices" && <PriceLists />}
+      {tab === "import" && <ImportPanel />}
+      {tab === "whatsapp" && <WhatsAppSettings />}
     </>
   );
 }
@@ -205,6 +213,92 @@ async function Materials() {
           ))}
         </ul>
       </Card>
+    </>
+  );
+}
+
+async function PriceLists() {
+  const supabase = await createClient();
+  const [{ data: lists }, { data: products }] = await Promise.all([
+    supabase.from("price_lists").select("id, name, notes, is_active, price_list_items(product_id, price), customers(id)").order("is_active", { ascending: false }).order("name"),
+    supabase.from("products").select("id, name, category, price").eq("is_active", true).order("category").order("name"),
+  ]);
+  return (
+    <>
+      <Card title="מחירון חדש">
+        <p className="mb-3 text-sm text-muted">
+          מחירון הוא רשימת מחירים מיוחדת (לפני מע״מ), למשל לחנויות או לאירועים. לקוח שמשויך למחירון מקבל בהזמנה את המחיר שלו,
+          ובמוצרים שאין להם מחיר במחירון, את המחיר הרגיל. משייכים לקוח למחירון בכרטיס הלקוח.
+        </p>
+        <ActionForm action={savePriceList} resetOnOk className="grid gap-4 md:grid-cols-3">
+          <Field label="שם"><input name="name" className={inputCls} required placeholder="למשל: חנויות" /></Field>
+          <Field label="הערות" className="md:col-span-2"><input name="notes" className={inputCls} /></Field>
+          <div className="md:col-span-3"><button className={btnPrimary}>הוספה</button></div>
+        </ActionForm>
+      </Card>
+      {(lists ?? []).length === 0 && <p className="text-muted">עוד אין מחירונים.</p>}
+      {(lists ?? []).map((l) => {
+        const prices = new Map((l.price_list_items as { product_id: string; price: number }[]).map((i) => [i.product_id, Number(i.price)]));
+        const customers = (l.customers as { id: string }[]).length;
+        return (
+          <Card key={l.id} className="p-0">
+            <details className="group">
+              <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-4 py-3">
+                <b className={l.is_active ? "font-display text-lg text-accent" : "font-display text-lg text-muted line-through"}>{l.name}</b>
+                <span className="text-sm text-muted">{fmt(prices.size)} מחירים · {fmt(customers)} לקוחות</span>
+                {!l.is_active && <Pill tone="neutral">לא פעיל</Pill>}
+                <span className="ms-auto text-sm text-accent group-open:hidden">פתיחה</span>
+              </summary>
+              <div className="flex flex-col gap-4 border-t border-line p-4">
+                <ActionForm action={savePriceListPrices} className="flex flex-col gap-3">
+                  <input type="hidden" name="id" value={l.id} />
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-sm">
+                      <thead className="text-muted">
+                        <tr><th className="py-2 text-start">מוצר</th><th className="py-2 text-start">מחיר רגיל</th><th className="py-2 text-start">מחיר במחירון</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {(products ?? []).map((p) => (
+                          <tr key={p.id}>
+                            <td className="py-1.5">{p.name}</td>
+                            <td className="py-1.5 tabular-nums text-muted">{money(Number(p.price))}</td>
+                            <td className="py-1.5">
+                              <input
+                                name={`price_${p.id}`}
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                defaultValue={prices.get(p.id) ?? ""}
+                                placeholder="רגיל"
+                                aria-label={`מחיר ${p.name} במחירון ${l.name}`}
+                                className={inputCls + " min-h-9 max-w-32"}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-muted">שדה ריק = המחיר הרגיל.</p>
+                  <div><button className={btnPrimary}>שמירת מחירים</button></div>
+                </ActionForm>
+                <details className="border-t border-line pt-3">
+                  <summary className="cursor-pointer text-sm font-bold text-accent">שם, הערות והפעלה</summary>
+                  <ActionForm action={savePriceList} className="mt-3 grid gap-4 md:grid-cols-3">
+                    <input type="hidden" name="id" value={l.id} />
+                    <Field label="שם"><input name="name" defaultValue={l.name} className={inputCls} required /></Field>
+                    <Field label="הערות"><input name="notes" defaultValue={l.notes ?? ""} className={inputCls} /></Field>
+                    <label className="flex items-center gap-1.5 self-end pb-3">
+                      <input type="checkbox" name="is_active" defaultChecked={l.is_active} className="size-4 accent-accent" /> פעיל
+                    </label>
+                    <div className="md:col-span-3"><button className={btnPrimary}>שמירה</button></div>
+                  </ActionForm>
+                </details>
+              </div>
+            </details>
+          </Card>
+        );
+      })}
     </>
   );
 }

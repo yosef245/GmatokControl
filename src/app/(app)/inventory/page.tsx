@@ -8,6 +8,9 @@ import { waLink } from "@/lib/whatsapp";
 import { fmt } from "@/lib/format";
 import { btnSecondary, Card, PageTitle, Pill } from "@/components/ui";
 import { StockForm } from "./stock-form";
+import { ActionForm } from "@/components/action-form";
+import { sendSupplierWhatsApp } from "@/lib/actions/whatsapp";
+import { waConfigured } from "@/lib/wa-api";
 
 const COLOR = { red: ["חוסר", "red"], orange: ["מתחת למינימום", "orange"], green: ["תקין", "green"] } as const;
 
@@ -19,6 +22,9 @@ export default async function InventoryPage() {
   const rank = { red: 0, orange: 1, green: 2 };
   rows.sort((a, b) => rank[a.color] - rank[b.color] || a.name.localeCompare(b.name, "he"));
   const toOrder = rows.filter((m) => m.toOrder > 0);
+  const suppliers = waConfigured()
+    ? [...new Set(toOrder.filter((m) => m.supplierName && m.supplierPhone).map((m) => m.supplierName!))]
+    : [];
 
   return (
     <>
@@ -42,6 +48,18 @@ export default async function InventoryPage() {
               );
             })}
           </ul>
+          {suppliers.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+              <span className="text-sm font-bold">שליחה בוואטסאפ עסקי, הזמנה אחת לכל ספק:</span>
+              {suppliers.map((sup) => (
+                <ActionForm key={sup} action={sendSupplierWhatsApp} className="flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="supplier" value={sup} />
+                  <span className="min-w-32">{sup}</span>
+                  <button className={btnSecondary + " min-h-9 px-3 text-sm"}>שליחת הזמנה ל{sup}</button>
+                </ActionForm>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
