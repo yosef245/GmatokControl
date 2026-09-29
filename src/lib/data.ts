@@ -92,3 +92,31 @@ export async function loadMaterials(): Promise<MaterialRow[]> {
     color: m.alert_status as AlertColor,
   }));
 }
+
+export interface RecentMark {
+  id: string;
+  productName: string;
+  quantity: number;
+  at: Date;
+  performedBy: string | null;
+  performerName: string | null;
+}
+
+/** Production marks from the last 10 minutes that can still be undone. */
+export async function loadRecentMarks(): Promise<RecentMark[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("production_logs")
+    .select("id, quantity, created_at, performed_by, products(name), users!production_logs_performed_by_fkey(full_name)")
+    .is("undone_at", null)
+    .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
+    .order("created_at", { ascending: false });
+  return (data ?? []).map((l) => ({
+    id: l.id,
+    productName: (l.products as unknown as { name: string }).name,
+    quantity: l.quantity,
+    at: new Date(l.created_at),
+    performedBy: l.performed_by,
+    performerName: (l.users as unknown as { full_name: string } | null)?.full_name ?? null,
+  }));
+}
