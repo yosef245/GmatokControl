@@ -9,7 +9,7 @@ export default function LoginPage() {
         <h1 className="font-display text-4xl text-accent">גוונים של מתוק</h1>
         <div className="mt-2 h-[3px] w-16 rounded bg-gold" />
       </div>
-      <p className="text-muted">נכנסים עם מספר הטלפון. נשלח אליך קוד חד־פעמי ב־SMS.</p>
+      <p className="text-muted">נכנסים עם האימייל והסיסמה שקיבלתם ממנהל המפעל.</p>
       <LoginForm />
     </main>
   );

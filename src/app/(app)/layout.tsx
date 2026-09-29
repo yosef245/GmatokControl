@@ -43,7 +43,7 @@ function NoAccess() {
   return (
     <main className="mx-auto mt-[10vh] flex max-w-md flex-col gap-4 px-4">
       <h1 className="font-display text-3xl text-accent">אין גישה עדיין</h1>
-      <p>המספר שלך לא מופיע ברשימת העובדים. בקשו ממנהל המפעל להוסיף אתכם בהגדרות, ואז היכנסו שוב.</p>
+      <p>האימייל שלך לא מופיע ברשימת העובדים. בקשו ממנהל המפעל להוסיף אתכם בהגדרות, ואז היכנסו שוב.</p>
       <form action="/auth/signout" method="post">
         <button className="min-h-11 rounded-lg border border-line bg-surface px-4 font-bold">יציאה</button>
       </form>

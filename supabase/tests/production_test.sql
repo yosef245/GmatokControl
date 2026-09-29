@@ -131,12 +131,40 @@ select pg_temp.login('050-0000006');
 insert into public.stock_movements (raw_material_id, quantity, movement_type, reason, performed_by)
 values ((select id from public.raw_materials where name = 'ממרח פרלינה לוז'), 10, 'receive', 'test', public.current_profile_id());
 
--- 8. the first login on an empty system becomes admin
+-- 8. email login: a confirmed email links to the staff profile with that email, an unconfirmed one does not
+reset role;
+update public.users set email = 'Dana@Example.com' where id = '00000000-0000-4000-8000-100000000002';
+do $$
+declare uid uuid; staff uuid := '00000000-0000-4000-8000-100000000002';
+begin
+  update public.users set auth_user_id = null where id = staff;
+  insert into auth.users (email) values ('dana@example.com') returning id into uid;
+  assert (select auth_user_id from public.users where id = staff) is null, 'unconfirmed email must not link';
+  update auth.users set email_confirmed_at = now() where id = uid;
+  assert (select auth_user_id from public.users where id = staff) = uid, 'confirmed email links';
+  -- staff added after their login exists are linked on insert
+  insert into auth.users (email, email_confirmed_at) values ('new.worker@example.com', now()) returning id into uid;
+  insert into public.users (full_name, email, roles) values ('עובד חדש', 'New.Worker@example.com', '{production_worker}');
+  assert (select auth_user_id from public.users where email = 'New.Worker@example.com') = uid, 'late staff row links';
+end $$;
+
+-- 9. the first login on an empty system becomes admin
 reset role;
 truncate public.users cascade;
 select pg_temp.login('052-1111111');
 do $$ begin
   assert public.has_any_role('{admin}'), 'first login becomes admin';
+end $$;
+
+-- 10. the same holds for an email login
+reset role;
+truncate public.users cascade;
+do $$
+declare uid uuid;
+begin
+  insert into auth.users (email, email_confirmed_at) values ('owner@example.com', now()) returning id into uid;
+  assert (select roles from public.users where auth_user_id = uid) = '{admin}', 'first email login becomes admin';
+  assert (select email from public.users where auth_user_id = uid) = 'owner@example.com', 'admin keeps the email';
 end $$;
 
 reset role;

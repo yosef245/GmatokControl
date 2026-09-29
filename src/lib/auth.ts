@@ -6,11 +6,12 @@ import type { Role } from "./domain/types";
 export interface Staff {
   id: string;
   fullName: string;
-  phone: string;
+  email: string | null;
+  phone: string | null;
   roles: Role[];
 }
 
-/** The signed-in staff member, or null when the phone number is not in the staff list. Redirects to /login when signed out. */
+/** The signed-in staff member, or null when the login is not in the staff list. Redirects to /login when signed out. */
 export const getStaff = cache(async (): Promise<Staff | null> => {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
@@ -18,10 +19,10 @@ export const getStaff = cache(async (): Promise<Staff | null> => {
   if (!uid) redirect("/login");
   const { data } = await supabase
     .from("users")
-    .select("id, full_name, phone, roles")
+    .select("id, full_name, email, phone, roles")
     .eq("auth_user_id", uid)
     .eq("is_active", true)
     .maybeSingle();
   if (!data) return null;
-  return { id: data.id, fullName: data.full_name, phone: data.phone, roles: data.roles as Role[] };
+  return { id: data.id, fullName: data.full_name, email: data.email, phone: data.phone, roles: data.roles as Role[] };
 });
